@@ -1,0 +1,105 @@
+using System;
+using System.Collections.Generic;
+using S1VoiceChat.Codec;
+using S1VoiceChat.Network;
+using S1VoiceChat.Routing;
+
+namespace S1VoiceChat.Runtime;
+
+public sealed class VoiceSession : IDisposable
+{
+    private readonly IVoiceTransport _transport;
+    private readonly IVoiceCodec _localCodec;
+    private readonly VoiceSettings _settings;
+    private readonly Dictionary<ulong, RemoteVoiceStream> _remoteStreams = new();
+    private ushort _sequence;
+    private bool _disposed;
+
+    public VoiceSession(ulong localPeerId, IVoiceTransport transport, IVoiceCodec localCodec, VoiceSettings settings)
+    {
+        LocalPeerId = localPeerId;
+        _transport = transport;
+        _localCodec = localCodec;
+        _settings = settings;
+        _transport.OnPacket += OnPacket;
+    }
+
+    public ulong LocalPeerId { get; }
+
+    public IReadOnlyDictionary<ulong, RemoteVoiceStream> RemoteStreams => _remoteStreams;
+
+    public void SendPcmFrame(ReadOnlySpan<short> pcm, VoiceChannel channel, IReadOnlyList<ulong>? recipients = null)
+    {
+        if (_disposed || !_transport.IsReady)
+            return;
+
+        var encoded = new byte[_settings.MaxEncodedBytesPerFrame];
+        var encodedLength = _localCodec.Encode(pcm, encoded);
+        if (encodedLength <= 0)
+            return;
+
+        var payload = new byte[encodedLength];
+        Array.Copy(encoded, payload, encodedLength);
+
+        var packet = new VoicePacket
+        {
+            Version = 1,
+            Channel = (byte)channel,
+            Sequence = _sequence++,
+            CaptureTimeMs = unchecked((uint)Environment.TickCount),
+            Payload = payload
+        };
+
+        if (recipients == null || recipients.Count == 0)
+        {
+            _transport.Broadcast(packet);
+            return;
+        }
+
+        foreach (var peerId in recipients)
+            _transport.SendTo(peerId, packet);
+    }
+
+    public RemoteVoiceStream GetOrCreateRemoteStream(ulong peerId)
+    {
+        if (_remoteStreams.TryGetValue(peerId, out var stream))
+            return stream;
+
+        var codec = new NativeOpusCodec(_settings.SampleRate, _settings.Channels, _settings.FrameSize);
+        stream = new RemoteVoiceStream(peerId, codec, _settings);
+        _remoteStreams.Add(peerId, stream);
+        return stream;
+    }
+
+    public void Update()
+    {
+        _transport.Poll();
+
+        foreach (var stream in _remoteStreams.Values)
+            stream.Update();
+    }
+
+    private void OnPacket(ulong senderPeerId, VoicePacket packet)
+    {
+        if (senderPeerId == LocalPeerId)
+            return;
+
+        var stream = GetOrCreateRemoteStream(senderPeerId);
+        stream.AddPacket(packet);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _transport.OnPacket -= OnPacket;
+        _localCodec.Dispose();
+
+        foreach (var stream in _remoteStreams.Values)
+            stream.Dispose();
+
+        _remoteStreams.Clear();
+        _disposed = true;
+    }
+}
