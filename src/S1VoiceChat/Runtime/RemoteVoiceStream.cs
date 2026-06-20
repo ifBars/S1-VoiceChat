@@ -2,6 +2,7 @@ using System;
 using S1VoiceChat.Codec;
 using S1VoiceChat.Network;
 using S1VoiceChat.Playback;
+using S1VoiceChat.Routing;
 
 namespace S1VoiceChat.Runtime;
 
@@ -28,12 +29,16 @@ public sealed class RemoteVoiceStream : IDisposable
 
     public ulong PeerId { get; }
     public int BufferedSamples => _audioBuffer.Count;
+    public VoiceChannel LastChannel { get; private set; } = VoiceChannel.Global;
 
     public void AddPacket(VoicePacket packet)
     {
         if (_disposed)
             return;
 
+        LastChannel = Enum.IsDefined(typeof(VoiceChannel), packet.Channel)
+            ? (VoiceChannel)packet.Channel
+            : VoiceChannel.Global;
         _jitterBuffer.Add(packet);
     }
 

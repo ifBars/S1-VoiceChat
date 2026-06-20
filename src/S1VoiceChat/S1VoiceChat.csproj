@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\..\..\SteamNetworkLib\Directory.Build.user.props" Condition="Exists('..\..\..\SteamNetworkLib\Directory.Build.user.props')" />
   <Import Project="local.build.props" Condition="Exists('local.build.props')" />
 
   <PropertyGroup>
@@ -9,23 +10,129 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <RootNamespace>S1VoiceChat</RootNamespace>
-    <Configurations>CrossCompat;MonoMelon;Il2CppMelon</Configurations>
+    <Configurations>MonoMelon;Il2CppMelon</Configurations>
     <Platforms>AnyCPU</Platforms>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)' == 'CrossCompat'">
-    <DefineConstants>$(DefineConstants);CROSS_COMPAT;MONOMELON</DefineConstants>
-    <AssemblyName>S1VoiceChat</AssemblyName>
+    <SteamworksManagedPath Condition="'$(SteamworksManagedPath)' == '' AND '$(MonoAssembliesPath)' != ''">$(MonoAssembliesPath)</SteamworksManagedPath>
+    <MelonLoaderIl2CppPath Condition="'$(MelonLoaderIl2CppPath)' == '' AND '$(Il2CppAssembliesPath)' != ''">$(Il2CppAssembliesPath)</MelonLoaderIl2CppPath>
+    <MelonLoaderMonoAssembliesPath Condition="'$(MelonLoaderMonoAssembliesPath)' == '' AND '$(MelonLoaderNet35Path)' != ''">$(MelonLoaderNet35Path)</MelonLoaderMonoAssembliesPath>
+    <MelonLoaderAssembliesPath Condition="'$(MelonLoaderAssembliesPath)' == '' AND '$(MelonLoaderNet6Path)' != ''">$(MelonLoaderNet6Path)</MelonLoaderAssembliesPath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'MonoMelon'">
-    <DefineConstants>$(DefineConstants);MONOMELON</DefineConstants>
+    <DefineConstants>$(DefineConstants);MONOMELON;S1VOICECHAT_STEAMNETWORKLIB</DefineConstants>
     <AssemblyName>S1VoiceChat.MonoMelon</AssemblyName>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Il2CppMelon'">
-    <DefineConstants>$(DefineConstants);IL2CPPMELON</DefineConstants>
+    <DefineConstants>$(DefineConstants);IL2CPPMELON;S1VOICECHAT_STEAMNETWORKLIB</DefineConstants>
     <AssemblyName>S1VoiceChat.Il2CppMelon</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)' == 'MonoMelon'">
+    <Reference Include="Assembly-CSharp-publicized">
+      <HintPath>$(MonoAssembliesPath)\Assembly-CSharp-publicized.dll</HintPath>
+    </Reference>
+    <Reference Include="MelonLoader">
+      <HintPath>$(MelonLoaderMonoAssembliesPath)\MelonLoader.dll</HintPath>
+    </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>$(SteamworksManagedPath)\com.rlabrecque.steamworks.net.dll</HintPath>
+    </Reference>
+    <Reference Include="SteamNetworkLib">
+      <HintPath>..\..\..\SteamNetworkLib\bin\Mono\netstandard2.1\SteamNetworkLib.dll</HintPath>
+    </Reference>
+    <Reference Include="FishNet.Runtime">
+      <HintPath>$(MonoAssembliesPath)\FishNet.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.AudioModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.IMGUIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.ImageConversionModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(MonoAssembliesPath)\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(MonoAssembliesPath)\Unity.TextMeshPro.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)' == 'Il2CppMelon'">
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(MelonLoaderIl2CppPath)\Assembly-CSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="MelonLoader">
+      <HintPath>$(MelonLoaderAssembliesPath)\MelonLoader.dll</HintPath>
+    </Reference>
+    <Reference Include="Il2Cppcom.rlabrecque.steamworks.net">
+      <HintPath>$(MelonLoaderIl2CppPath)\Il2Cppcom.rlabrecque.steamworks.net.dll</HintPath>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(MelonLoaderIl2CppPath)\Il2Cppmscorlib.dll</HintPath>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(MelonLoaderAssembliesPath)\Il2CppInterop.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="SteamNetworkLib">
+      <HintPath>..\..\..\SteamNetworkLib\bin\Il2cpp\netstandard2.1\SteamNetworkLib.dll</HintPath>
+    </Reference>
+    <Reference Include="Il2CppFishNet.Runtime">
+      <HintPath>$(MelonLoaderIl2CppPath)\Il2CppFishNet.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.AudioModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.IMGUIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.ImageConversionModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(MelonLoaderIl2CppPath)\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>$(MelonLoaderIl2CppPath)\Unity.TextMeshPro.dll</HintPath>
+    </Reference>
+  </ItemGroup>
 </Project>

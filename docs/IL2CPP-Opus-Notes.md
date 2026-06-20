@@ -39,7 +39,7 @@ Sample rate: 48000 Hz
 Channels: 1
 Frame size: 960 samples
 Frame duration: 20 ms
-Bitrate: TODO via opus_encoder_ctl
+Bitrate: default encoder bitrate unless native Opus experiments later add `opus_encoder_ctl`
 Transport: unreliable/no-delay
 Jitter target: 3 packets
 ```

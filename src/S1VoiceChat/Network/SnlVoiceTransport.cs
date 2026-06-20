@@ -11,32 +11,54 @@ namespace S1VoiceChat.Network;
 /// </summary>
 public sealed class SnlVoiceTransport : IVoiceTransport
 {
+    private ISnlVoicePacketClient? _client;
+    private bool _disposed;
+
     public event Action<ulong, VoicePacket>? OnPacket;
 
-    public bool IsReady { get; private set; }
+    public bool IsReady => !_disposed && _client?.IsReady == true;
 
     public SnlVoiceTransport()
     {
-        IsReady = false;
+    }
+
+    public SnlVoiceTransport(ISnlVoicePacketClient client)
+    {
+        Attach(client);
     }
 
     public void Attach(object snlClientOrServer)
     {
-        // TODO: Replace object with the real SteamNetworkLib client/server type once references
-        // are added. Register the voice packet handler here.
-        IsReady = snlClientOrServer != null;
+        if (snlClientOrServer is not ISnlVoicePacketClient client)
+            throw new ArgumentException("SNL voice transport requires an ISnlVoicePacketClient adapter.", nameof(snlClientOrServer));
+
+        Attach(client);
+    }
+
+    public void Attach(ISnlVoicePacketClient client)
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(SnlVoiceTransport));
+
+        if (_client != null)
+            _client.OnRawVoicePacket -= ReceiveFromNetwork;
+
+        _client = client ?? throw new ArgumentNullException(nameof(client));
+        _client.OnRawVoicePacket += ReceiveFromNetwork;
     }
 
     public void SendTo(ulong peerId, VoicePacket packet)
     {
+        TrySendTo(peerId, packet);
+    }
+
+    public bool TrySendTo(ulong peerId, VoicePacket packet)
+    {
         if (!IsReady)
-            return;
+            return false;
 
         var bytes = packet.Serialize();
-
-        // TODO: Send bytes to peerId using SteamNetworkLib/SNL unreliable no-delay messaging.
-        _ = bytes;
-        _ = peerId;
+        return _client!.SendVoicePacket(peerId, bytes);
     }
 
     public void Broadcast(VoicePacket packet)
@@ -45,26 +67,60 @@ public sealed class SnlVoiceTransport : IVoiceTransport
             return;
 
         var bytes = packet.Serialize();
-
-        // TODO: Broadcast to current relevant peers. For proximity voice, prefer caller-side
-        // routing so you do not send voice to players outside range.
-        _ = bytes;
+        _client!.BroadcastVoicePacket(bytes);
     }
 
     public void ReceiveFromNetwork(ulong senderPeerId, byte[] data)
     {
-        var packet = VoicePacket.Deserialize(data);
-        OnPacket?.Invoke(senderPeerId, packet);
+        TryReceiveFromNetwork(senderPeerId, data);
+    }
+
+    public bool TryReceiveFromNetwork(ulong senderPeerId, byte[] data)
+    {
+        try
+        {
+            var packet = VoicePacket.Deserialize(data);
+            OnPacket?.Invoke(senderPeerId, packet);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     public void Poll()
     {
-        // SteamNetworkLib may already pump callbacks elsewhere. Keep this method for transports
-        // that need explicit polling.
+        if (IsReady)
+            _client!.ProcessIncomingVoicePackets();
     }
 
     public void Dispose()
     {
-        IsReady = false;
+        if (_disposed)
+            return;
+
+        if (_client != null)
+            _client.OnRawVoicePacket -= ReceiveFromNetwork;
+
+        _client = null;
+        _disposed = true;
     }
+}
+
+public interface ISnlVoicePacketClient
+{
+    event Action<ulong, byte[]>? OnRawVoicePacket;
+
+    bool IsReady { get; }
+
+    bool SendVoicePacket(ulong peerId, byte[] data);
+
+    void BroadcastVoicePacket(byte[] data);
+
+    void ProcessIncomingVoicePackets();
 }

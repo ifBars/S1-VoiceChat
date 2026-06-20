@@ -11,16 +11,23 @@ public sealed class VoiceSession : IDisposable
     private readonly IVoiceTransport _transport;
     private readonly IVoiceCodec _localCodec;
     private readonly VoiceSettings _settings;
+    private readonly Func<IVoiceCodec> _remoteCodecFactory;
     private readonly Dictionary<ulong, RemoteVoiceStream> _remoteStreams = new();
     private ushort _sequence;
     private bool _disposed;
 
-    public VoiceSession(ulong localPeerId, IVoiceTransport transport, IVoiceCodec localCodec, VoiceSettings settings)
+    public VoiceSession(
+        ulong localPeerId,
+        IVoiceTransport transport,
+        IVoiceCodec localCodec,
+        VoiceSettings settings,
+        Func<IVoiceCodec>? remoteCodecFactory = null)
     {
         LocalPeerId = localPeerId;
         _transport = transport;
         _localCodec = localCodec;
         _settings = settings;
+        _remoteCodecFactory = remoteCodecFactory ?? (() => new NativeOpusCodec(_settings.SampleRate, _settings.Channels, _settings.FrameSize));
         _transport.OnPacket += OnPacket;
     }
 
@@ -33,7 +40,7 @@ public sealed class VoiceSession : IDisposable
         if (_disposed || !_transport.IsReady)
             return;
 
-        var encoded = new byte[_settings.MaxEncodedBytesPerFrame];
+        var encoded = new byte[Math.Min(_settings.MaxEncodedBytesPerFrame, VoicePacket.MaxPayloadBytes)];
         var encodedLength = _localCodec.Encode(pcm, encoded);
         if (encodedLength <= 0)
             return;
@@ -47,6 +54,7 @@ public sealed class VoiceSession : IDisposable
             Channel = (byte)channel,
             Sequence = _sequence++,
             CaptureTimeMs = unchecked((uint)Environment.TickCount),
+            SenderPeerId = LocalPeerId,
             Payload = payload
         };
 
@@ -65,7 +73,7 @@ public sealed class VoiceSession : IDisposable
         if (_remoteStreams.TryGetValue(peerId, out var stream))
             return stream;
 
-        var codec = new NativeOpusCodec(_settings.SampleRate, _settings.Channels, _settings.FrameSize);
+        var codec = _remoteCodecFactory();
         stream = new RemoteVoiceStream(peerId, codec, _settings);
         _remoteStreams.Add(peerId, stream);
         return stream;
@@ -81,10 +89,11 @@ public sealed class VoiceSession : IDisposable
 
     private void OnPacket(ulong senderPeerId, VoicePacket packet)
     {
-        if (senderPeerId == LocalPeerId)
+        var speakerPeerId = packet.SenderPeerId == 0 ? senderPeerId : packet.SenderPeerId;
+        if (speakerPeerId == LocalPeerId)
             return;
 
-        var stream = GetOrCreateRemoteStream(senderPeerId);
+        var stream = GetOrCreateRemoteStream(speakerPeerId);
         stream.AddPacket(packet);
     }
 
