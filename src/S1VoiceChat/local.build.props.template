@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- Optional local paths for future Schedule I/MelonLoader integration. -->
+    <ScheduleOneIl2CppAssembliesPath>..\..\..\il2cpp-scheduleone-assemblies</ScheduleOneIl2CppAssembliesPath>
+    <MelonLoaderAssembliesPath>C:\Program Files (x86)\Steam\steamapps\common\Schedule I\MelonLoader\net6</MelonLoaderAssembliesPath>
+    <MelonLoaderMonoAssembliesPath>C:\Program Files (x86)\Steam\steamapps\common\Schedule I\MelonLoader\net35</MelonLoaderMonoAssembliesPath>
+  </PropertyGroup>
+</Project>
