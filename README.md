@@ -1,206 +1,31 @@
-﻿# S1 VoiceChat
+# S1 VoiceChat
 
-Voice chat mod for Schedule I.
+Voice chat for Schedule I multiplayer.
 
-The current live path uses WASAPI microphone capture, native Opus voice encoding, Unity playback, and SteamNetworkLib packet transport.
+S1 VoiceChat adds push-to-talk voice, proximity routing, dedicated-server relay support, and a small in-game HUD indicator. It works with SteamNetworkLib and ships in separate Mono and Il2Cpp packages.
 
-## Goals
+## Download
 
-- Proximity voice for Schedule I multiplayer.
-- P2P support through SteamNetworkLib/SNL.
-- Dedicated-server support through server relay.
-- Live microphone capture suitable for Mono and IL2CPP.
-- Small binary voice packets instead of JSON-per-frame stream messages.
-- Clean separation between capture, codec, transport, routing, and playback.
+Download the package for your game runtime from the latest GitHub release:
 
-## Current status
+- `S1VoiceChat-Il2Cpp-vX.X.X.zip` for the normal public/beta Schedule I branches.
+- `S1VoiceChat-Mono-vX.X.X.zip` for the alternate Mono branches.
 
-Implemented foundation:
+If you are not sure which one you need, start with the Il2Cpp package. Most current public installs use Il2Cpp.
 
-- `IVoiceCodec` abstraction.
-- `NativeOpusCodec` wrapper for production live voice.
-- Binary `VoicePacket` encode/decode helpers.
-- `IVoiceTransport` abstraction.
-- Loopback transport for local pipeline testing.
-- SteamNetworkLib raw packet transport adapter.
-- Dedicated-server relay core that preserves original speaker identity and rejects spoofed sender IDs.
-- Minimal MelonLoader bootstrap that initializes SteamNetworkLib and attaches the voice transport.
-- Live runtime enabled by MelonPreferences by default on interactive clients.
-- WASAPI microphone capture with `auto` device selection that probes active inputs once and reuses the selected endpoint.
-- Native Opus encoding by default, with `Pcm16Codec` retained as an explicit debug/fallback codec.
-- Proximity recipient resolution from Schedule I player state with lobby-member fallback.
-- Small push-to-talk HUD indicator in `Main` and `Tutorial` only.
-- Audio settings integration for received voice volume and open-mic mode.
-- Headless/batch-mode guard so dedicated server processes never create capture, playback, or HUD state.
-- Runtime smoke probes for clean isolated P2P and dedicated server installs.
-- Standalone WASAPI probe for verifying Windows capture endpoints without launching the game.
-- Jitter buffer.
-- Ring buffer.
-- Voice session coordinator.
-- Basic settings model.
-- IL2CPP-oriented notes.
-- CI workflow for core compile checks.
+## Requirements
 
-Future polish ideas:
+- Schedule I with MelonLoader installed.
+- SteamNetworkLib installed through the included `UserLibs/SteamNetworkLib.dll`.
+- Windows, for the default WASAPI microphone capture path.
+- A working microphone selected in Windows.
 
-- In-game mute menu, rebinding UI, and per-player speaking indicators.
-
-## Build configurations
-
-The project builds deployable Mono and Il2Cpp MelonLoader artifacts:
-
-```powershell
-dotnet build src/S1VoiceChat/S1VoiceChat.csproj -c MonoMelon
-dotnet build src/S1VoiceChat/S1VoiceChat.csproj -c Il2CppMelon
-```
-
-`MonoMelon` targets `netstandard2.1`. `Il2CppMelon` targets `net6.0`, matching the common MelonLoader IL2CPP pattern. There is no cross-compatible runtime build because the live mod has Mono- and Il2Cpp-specific references behind conditional compilation.
-
-Copy `src/S1VoiceChat/local.build.props.template` to `src/S1VoiceChat/local.build.props` when you start adding local Schedule I, MelonLoader, SteamNetworkLib, or assembly references.
-
-## Suggested Validation Path
-
-1. Run the core unit harness.
-2. Build both `MonoMelon` and `Il2CppMelon`.
-3. Run the native Opus and WASAPI probe tests.
-4. Run isolated install validation for P2P and dedicated profiles.
-5. Run the LocalLobby P2P smoke when transport behavior changes.
-6. Run the DedicatedServerMod relay smoke when relay behavior changes.
-7. For manual live checks, launch with `--s1vc-live-voice`; enable `--s1vc-debug-logs` only while diagnosing capture/playback.
-
-## Automated validation
-
-Run the core packet, routing, buffer, session, and SNL transport adapter checks with:
-
-```powershell
-dotnet run --project tests/S1VoiceChat.Tests/S1VoiceChat.Tests.csproj -c Release
-```
-
-Run the full local validation gate with:
-
-```powershell
-tests/Run-S1VoiceChatValidation.ps1
-```
-
-The full gate builds `MonoMelon` and `Il2CppMelon`, then inspects the local Mono/Il2Cpp installs before runtime testing. By default it checks both regular P2P and dedicated-server profiles:
-
-```powershell
-tests/Run-S1VoiceChatValidation.ps1 -Scenario P2P
-tests/Run-S1VoiceChatValidation.ps1 -Scenario Dedicated
-```
-
-The P2P profile expects only the S1VoiceChat mod, SteamNetworkLib, and the WASAPI/Opus support libraries. The dedicated profile expects S1VoiceChat plus the matching DedicatedServerMod/S1API companion DLLs. Both profiles fail when `Mods/` is missing the expected DLLs or contains extra mods that could contaminate voice-chat validation.
-
-To copy only the built S1VoiceChat DLLs into the checked installs before auditing:
-
-```powershell
-tests/Run-S1VoiceChatValidation.ps1 -Scenario Dedicated -DeployVoiceChat
-```
-
-This does not remove or move other mods; extra `Mods/` entries still fail the clean-install audit.
-
-For clean validation without touching the normal game installs, use isolated installs:
-
-```powershell
-tests/Run-S1VoiceChatValidation.ps1 -Scenario P2P -UseIsolatedInstalls
-tests/Run-S1VoiceChatValidation.ps1 -Scenario Dedicated -UseIsolatedInstalls
-```
-
-Isolated mode creates per-run game copies under `artifacts/isolated-installs`, deploys only the expected DLLs for that profile, audits `Mods/` and `UserLibs`, then removes the generated copies after a passing run. Run the P2P and dedicated profiles separately; both build into the same project output directories.
-
-Run the runtime smoke gate to launch a clean isolated game process and require SteamNetworkLib transport initialization:
-
-```powershell
-tests/Run-S1VoiceChatRuntimeSmoke.ps1 -Scenario P2P -Runtime Mono -Side Client -RequireTransport
-tests/Run-S1VoiceChatRuntimeSmoke.ps1 -Scenario P2P -Runtime Il2Cpp -Side Client -RequireTransport
-tests/Run-S1VoiceChatRuntimeSmoke.ps1 -Scenario Dedicated -Runtime Mono -Side Client -RequireTransport
-tests/Run-S1VoiceChatRuntimeSmoke.ps1 -Scenario Dedicated -Runtime Mono -Side Server -RequireTransport
-tests/Run-S1VoiceChatRuntimeSmoke.ps1 -Scenario Dedicated -Runtime Il2Cpp -Side Client -RequireTransport
-tests/Run-S1VoiceChatRuntimeSmoke.ps1 -Scenario Dedicated -Runtime Il2Cpp -Side Server -RequireTransport
-```
-
-The runtime smoke script runs the isolated validation gate first, launches the selected clean profile with `--s1vc-smoke`, waits for a `PASS|TransportReady|...` result, captures MelonLoader logs, then removes the generated isolated install unless `-KeepIsolatedInstalls` is set. Run these commands sequentially; each isolated dedicated profile can copy enough game files that parallel runs may exhaust disk space.
-
-Run the automated two-client P2P LocalLobby packet smoke with:
-
-```powershell
-tests/Run-S1VoiceChatTwoClientSmoke.ps1 -Runtime Mono
-tests/Run-S1VoiceChatTwoClientSmoke.ps1 -Runtime Il2Cpp
-```
-
-This prepares a clean isolated install, installs LocalLobby, starts a host and client with separate Goldberg Steam IDs, loads a save through the host-side smoke probe, and requires the receiver to observe the sender's synthetic S1VoiceChat packet.
-
-Run the automated dedicated relay packet smoke with:
-
-```powershell
-tests/Run-S1VoiceChatDedicatedRelaySmoke.ps1 -Runtime Mono
-tests/Run-S1VoiceChatDedicatedRelaySmoke.ps1 -Runtime Il2Cpp
-```
-
-This prepares clean isolated dedicated server/client installs, audits `Mods/` and `UserLibs/`, waits for the DedicatedServerMod ready marker, auto-connects two clients with `--server-ip` and `--server-port`, and requires the receiver to observe the sender's S1VoiceChat packet through SteamNetworkLib's dedicated relay path.
-
-## Live Voice Mode
-
-Live voice mode is enabled by default through `MelonPreferences` on interactive clients and remains disabled in batch/headless dedicated server processes. Manual launchers can still pass explicit flags when testing:
-
-```powershell
-tests/Install-S1VoiceChatManualLocalLobby.ps1 -Runtime Il2Cpp -GamePath "D:\SteamLibrary\steamapps\common\Schedule I_public" -EnableLiveVoice
-```
-
-The generated launchers add explicit test arguments such as `--s1vc-live-voice --s1vc-ptt-key V --s1vc-voice-channel Global --s1vc-codec Opus --s1vc-capture-source wasapi --s1vc-mic-device auto`. By default, normal installs use push-to-talk on `V`, Proximity routing, WASAPI capture with `auto` device selection, and Opus voice encoding. Voice packets are sent as raw SteamNetworkLib packets on logical P2P channel `3`, using unreliable/no-delay delivery. The manual `F8` packet probe remains enabled in the generated LocalLobby launchers.
-
-Opus is the production default at a 24 kbps voice bitrate. Use `--s1vc-codec Pcm16` or `--s1vc-pcm16` only for diagnostics or as an emergency fallback when native Opus cannot load. Each voice packet carries its codec id, so control packets and fallback PCM packets are not decoded as Opus audio.
-
-When the Schedule I settings screen is available, S1 VoiceChat adds two controls to the Audio settings panel:
-
-- `S1 Voice Chat`: received voice playback volume, persisted as `S1VoiceChat.OutputVolume`.
-- `Open Mic`: transmit continuously while live voice is active, persisted as `S1VoiceChat.OpenMic`.
-
-Push-to-talk is still the default. `--s1vc-open-mic` remains available for launcher-driven testing and forces open mic for that process.
-
-The MelonPreferences category `S1VoiceChat` also exposes:
-
-- `Enabled`: enable or disable interactive live voice.
-- `PushToTalkKey`: Unity `KeyCode` name, default `V`.
-- `VoiceChannel`: `Proximity`, `Whisper`, `Shout`, `Radio`, or `Global`.
-- `CaptureSource`: `Wasapi`, `Microphone`, or `Tone`.
-- `MicrophoneDevice`: `auto`, `default`, device index, device name, or blank for first Unity microphone.
-- `Codec`: `Opus` or `Pcm16`.
-- `OpusBitrate`: Opus bitrate in bits per second.
-- `ProximityRangeMeters`, `WhisperRangeMeters`, `ShoutRangeMeters`: routing distances.
-- `DiagnosticLogging`: verbose capture/status logging for troubleshooting.
-
-WASAPI is the default live capture source. The `auto` device selector probes active Windows capture endpoints once per live capture instance and chooses the endpoint producing nonzero PCM. This avoids repeatedly probing on every push-to-talk transition. Override it with `--s1vc-mic-device "<device name>"`, `--s1vc-mic-device-index <index>`, or `--s1vc-mic-device default`.
-
-Verbose capture/status logging is off by default. Enable it with the Melon preference `S1VoiceChat.DiagnosticLogging=true` or a launch flag such as `--s1vc-debug-logs` when diagnosing input devices.
-
-Verify Windows capture endpoints without launching Schedule I:
-
-```powershell
-dotnet run --project tests/S1VoiceChat.WasapiProbe/S1VoiceChat.WasapiProbe.csproj -- --device auto --duration-ms 2000 --play-test-tone --require-nonzero
-```
-
-For temporary client-side mute testing before the in-game mute menu exists, add `--s1vc-muted-peer <steamId>` for one peer or `--s1vc-muted-peers <steamId1,steamId2>` for a list. Muted peers are excluded from outgoing recipient selection.
-
-The live HUD indicator embeds `assets/microphone.png` and `assets/mute.png` into the mod assembly and extracts them to `UserData/S1VoiceChat/assets` at runtime when needed. Users do not need to install or keep separate PNG files. The HUD and live voice capture/playback are gated to the `Main` and `Tutorial` scenes so voice chat is not active in the Menu.
-
-The automated smoke tests prove the S1VoiceChat packet path, including P2P LocalLobby and DedicatedServerMod relay on Mono and Il2Cpp. The WASAPI probe verifies local Windows capture endpoints. In-game live capture is validated by launching with `--s1vc-live-voice` and checking for nonzero `Energy`/`CapturePeak` with diagnostic logging enabled.
-
-For proximity routing:
-
-```powershell
-tests/Install-S1VoiceChatManualLocalLobby.ps1 -Runtime Il2Cpp -GamePath "D:\SteamLibrary\steamapps\common\Schedule I_public" -EnableLiveVoice -VoiceChannel Proximity
-```
-
-Proximity mode resolves `ScheduleOne.PlayerScripts.Player.PlayerList`, maps `PlayerCode` to Steam IDs, and routes to players inside `VoiceSettings.ProximityRangeMeters`. If player-position mapping is not available yet, the runtime falls back to remote lobby peers rather than dropping voice.
-
-In dedicated-server sessions, SteamNetworkLib switches to its `DedicatedRelay` compatibility path and sends the same S1VoiceChat packets through DedicatedServerMod custom messaging. The server process relays bytes; it does not create microphone capture, audio playback, or the HUD.
-
-## Native Opus Dependency
-
-Do not use OpusSharp for IL2CPP live voice. S1 VoiceChat calls libopus directly through `NativeOpusCodec` and uses `OpusSharp.Natives` only as a source for the Windows native `opus.dll`. Installers copy `opus.dll` to `UserLibs` next to `NAudio.Core.dll`, `NAudio.Wasapi.dll`, and `SteamNetworkLib.dll`:
+The release zip includes the voice-chat DLL and required `UserLibs` dependencies:
 
 ```text
+Mods/
+S1VoiceChat.Il2CppMelon.dll or S1VoiceChat.MonoMelon.dll
+
 UserLibs/
 SteamNetworkLib.dll
 NAudio.Core.dll
@@ -208,21 +33,114 @@ NAudio.Wasapi.dll
 opus.dll
 ```
 
-On Windows, the P/Invoke target is `opus`. `NativeOpusCodec` preloads `opus.dll` from the game root, `UserLibs`, the mod assembly directory, or `Mods/S1VoiceChat` before the first encode/decode call.
+The HUD icons are embedded in the mod assembly. You do not need to install separate PNG files.
 
-## Project layout
+## Install
+
+1. Close the game.
+2. Download the Mono or Il2Cpp zip that matches your game branch.
+3. Extract the zip into your Schedule I game folder.
+4. Make sure the zip merged into the existing `Mods/` and `UserLibs/` folders.
+5. Start the game.
+
+For example, after installing the Il2Cpp package you should have:
 
 ```text
-src/S1VoiceChat/
-Capture/
-Codec/
-Network/
-Playback/
-Routing/
-Runtime/
-Utilities/
+Schedule I/
+Mods/S1VoiceChat.Il2CppMelon.dll
+UserLibs/SteamNetworkLib.dll
+UserLibs/NAudio.Core.dll
+UserLibs/NAudio.Wasapi.dll
+UserLibs/opus.dll
 ```
 
-## Notes
+## Basic use
 
-The original SteamNetworkLib audio streaming example was designed for music-like streaming and was Mono-gated because OpusSharp had IL2CPP marshaling issues. This repo takes the safer approach: direct native Opus P/Invoke, manual packet serialization, small mono VOIP frames, WASAPI capture, and transport abstraction.
+- Hold `V` to talk.
+- Release `V` to stop transmitting.
+- Voice chat only runs in the `Main` and `Tutorial` scenes. It does not run in the main menu.
+- By default, voice uses proximity chat. Nearby players hear you; far-away players do not.
+- Dedicated server processes relay voice packets but do not record or play audio.
+
+The HUD indicator appears while in-game so you can tell whether push-to-talk is idle, muted, or transmitting.
+
+## In-game settings
+
+Open `Settings > Audio`.
+
+S1 VoiceChat adds:
+
+- `Voice Chat Volume`: received voice playback volume.
+- `Open Mic`: when enabled, your mic transmits continuously while live voice is active.
+
+Push-to-talk is the default and is safer for normal play. Use Open Mic only if you actually want continuous transmit.
+
+## MelonPreferences
+
+The mod creates a `S1VoiceChat` MelonPreferences category. You can edit these from MelonLoader preference files or any preferences UI you use.
+
+Common options:
+
+| Preference | Default | What it does |
+| --- | --- | --- |
+| `Enabled` | `true` | Enables live voice on interactive clients. |
+| `OutputVolume` | `100` | Received voice volume percent. Also controlled by the Audio settings slider. |
+| `OpenMic` | `false` | Transmit continuously instead of requiring push-to-talk. Also controlled by the Audio settings toggle. |
+| `PushToTalkKey` | `V` | Unity `KeyCode` name for push-to-talk. |
+| `VoiceChannel` | `Proximity` | Routing mode: `Proximity`, `Whisper`, `Shout`, `Radio`, or `Global`. |
+| `CaptureSource` | `Wasapi` | Capture backend: `Wasapi`, `Microphone`, or `Tone`. |
+| `MicrophoneDevice` | `auto` | Capture device. Use `auto`, `default`, an index, or a device name. |
+| `Codec` | `Opus` | Voice codec. Use `Pcm16` only as a fallback/debug option. |
+| `OpusBitrate` | `24000` | Opus bitrate in bits per second. |
+| `ProximityRangeMeters` | `25` | Normal proximity range. |
+| `WhisperRangeMeters` | `6` | Whisper range. |
+| `ShoutRangeMeters` | `45` | Shout range. |
+| `DiagnosticLogging` | `false` | Extra capture/playback logs for troubleshooting. Leave this off during normal play. |
+
+## Launch flags
+
+Most users do not need launch flags. They are useful when testing a specific setup.
+
+```text
+--s1vc-live-voice
+--s1vc-disable-live-voice
+--s1vc-open-mic
+--s1vc-ptt-key V
+--s1vc-voice-channel Proximity
+--s1vc-codec Opus
+--s1vc-codec Pcm16
+--s1vc-capture-source wasapi
+--s1vc-mic-device auto
+--s1vc-debug-logs
+```
+
+Launch flags override preferences for that game process.
+
+## Troubleshooting
+
+If nobody can hear you:
+
+1. Confirm you installed the package that matches your runtime.
+2. Check that `SteamNetworkLib.dll`, `NAudio.Core.dll`, `NAudio.Wasapi.dll`, and `opus.dll` are in `UserLibs/`.
+3. Check Windows microphone permissions and input device selection.
+4. Load into a save. Voice chat is disabled in the menu.
+5. Hold `V` while speaking, unless Open Mic is enabled.
+6. Temporarily enable `DiagnosticLogging` or launch with `--s1vc-debug-logs`, then check the MelonLoader log.
+
+If capture logs show silence, set `MicrophoneDevice` to `default` or to the exact Windows device name instead of `auto`.
+
+If the game fails to load the mod, make sure you did not mix the Mono DLL into an Il2Cpp install or the Il2Cpp DLL into a Mono install.
+
+## Credits
+
+Icon credits are included in the release zip as `ICON-CREDITS.txt`.
+
+Mute and unmute icons are by Kiranshastry from Flaticon.
+
+## Developer docs
+
+Developer notes live in `docs/`:
+
+- [Development workflow](docs/development.md)
+- [Integration notes](docs/Integration-Notes.md)
+- [IL2CPP Opus notes](docs/IL2CPP-Opus-Notes.md)
