@@ -50,6 +50,9 @@ public sealed class NativeOpusCodec : IVoiceCodec
     public int Decode(ReadOnlySpan<byte> encoded, Span<short> pcmOutput, bool useForwardErrorCorrection = false)
     {
         ThrowIfDisposed();
+        if (encoded.IsEmpty)
+            return DecodePacketLoss(pcmOutput);
+
         if (pcmOutput.Length < FrameSize * Channels)
             throw new ArgumentException($"PCM output must contain at least {FrameSize * Channels} samples.", nameof(pcmOutput));
 
@@ -66,8 +69,11 @@ public sealed class NativeOpusCodec : IVoiceCodec
     public int DecodePacketLoss(Span<short> pcmOutput)
     {
         ThrowIfDisposed();
+        if (pcmOutput.Length < FrameSize * Channels)
+            throw new ArgumentException($"PCM output must contain at least {FrameSize * Channels} samples.", nameof(pcmOutput));
+
         var pcmArray = new short[FrameSize * Channels];
-        var result = OpusNative.opus_decode(_decoder, null, 0, pcmArray, FrameSize, 0);
+        var result = OpusNative.opus_decode_missing(_decoder, IntPtr.Zero, 0, pcmArray, FrameSize, 0);
 
         if (result > 0)
             pcmArray.AsSpan(0, result * Channels).CopyTo(pcmOutput);
@@ -117,8 +123,11 @@ public sealed class NativeOpusCodec : IVoiceCodec
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr opus_decoder_create(int Fs, int channels, out int error);
 
-        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int opus_decode(IntPtr st, byte[]? data, int len, short[] pcm, int frame_size, int decode_fec);
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "opus_decode")]
+        public static extern int opus_decode(IntPtr st, byte[] data, int len, short[] pcm, int frame_size, int decode_fec);
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "opus_decode")]
+        public static extern int opus_decode_missing(IntPtr st, IntPtr data, int len, short[] pcm, int frame_size, int decode_fec);
 
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void opus_decoder_destroy(IntPtr st);
