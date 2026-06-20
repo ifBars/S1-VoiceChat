@@ -147,15 +147,7 @@ function Copy-VoiceChatAssets {
         [string]$GamePath
     )
 
-    Assert-Path $voiceAssetsDir "$Label S1VoiceChat assets"
-    $targetAssetsDir = Join-Path $GamePath "Mods\S1VoiceChat\assets"
-    New-Item -ItemType Directory -Path $targetAssetsDir -Force | Out-Null
-
-    foreach ($asset in Get-ChildItem -LiteralPath $voiceAssetsDir -File -Force) {
-        Copy-Item -LiteralPath $asset.FullName -Destination (Join-Path $targetAssetsDir $asset.Name) -Force
-    }
-
-    Write-Host "Deployed S1VoiceChat assets to $targetAssetsDir" -ForegroundColor Gray
+    Write-Host "$Label S1VoiceChat HUD assets are embedded in the mod assembly." -ForegroundColor Gray
 }
 
 function Copy-VoiceChatUserLibDependencies {
@@ -457,8 +449,7 @@ $il2cppDedicatedClientDll = Join-Path $workspaceRoot "DedicatedServerMod\bin\Il2
 $il2cppDedicatedServerDll = Join-Path $workspaceRoot "DedicatedServerMod\bin\Il2cpp_Server\net6.0\DedicatedServerMod_Il2cpp_Server.dll"
 $monoS1ApiDll = Join-Path $workspaceRoot "S1API\S1API\bin\MonoMelon\netstandard2.1\S1API.dll"
 $il2cppS1ApiDll = Join-Path $workspaceRoot "S1API\S1API\bin\Il2CppMelon\net6.0\S1API.dll"
-$voiceAssetsDir = Join-Path $repoRoot "assets"
-$requiredVoiceAssetFiles = @("microphone.png", "mute.png")
+$requiredVoiceAssetFiles = @()
 $requiredVoiceUserLibs = @("SteamNetworkLib.dll|SteamNetworkLib-Mono.dll|SteamNetworkLib-IL2Cpp.dll", "NAudio.Core.dll", "NAudio.Wasapi.dll", "opus.dll")
 
 Write-Host "S1VoiceChat validation" -ForegroundColor Cyan

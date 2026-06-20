@@ -1,6 +1,5 @@
 #if S1VOICECHAT_STEAMNETWORKLIB
 using System;
-using System.IO;
 using MelonLoader;
 using UnityEngine;
 
@@ -120,39 +119,25 @@ internal sealed class PttHudOverlay : IDisposable
 
     private Texture2D? LoadIcon(string fileName)
     {
-        foreach (var path in GetIconCandidates(fileName))
+        try
         {
-            if (!File.Exists(path))
-                continue;
+            var bytes = EmbeddedHudIconAssets.LoadIconBytes(fileName, _logger);
+            if (bytes == null || bytes.Length == 0)
+                return null;
 
-            try
-            {
-                var texture = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false);
-                if (ImageConversion.LoadImage(texture, File.ReadAllBytes(path), markNonReadable: false))
-                    return texture;
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false);
+            if (ImageConversion.LoadImage(texture, bytes, markNonReadable: false))
+                return texture;
 
-                DestroyTexture(texture);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Failed to load PTT HUD icon '{path}': {ex.Message}");
-            }
+            DestroyTexture(texture);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"Failed to load embedded PTT HUD icon '{fileName}': {ex.Message}");
         }
 
-        _logger.Warning($"PTT HUD icon not found: {fileName}");
+        _logger.Warning($"Embedded PTT HUD icon not found: {fileName}");
         return null;
-    }
-
-    private static string[] GetIconCandidates(string fileName)
-    {
-        return new[]
-        {
-            Path.Combine(AppContext.BaseDirectory, "Mods", "S1VoiceChat", "assets", fileName),
-            Path.Combine(AppContext.BaseDirectory, "Mods", "S1-VoiceChat", "assets", fileName),
-            Path.Combine(Environment.CurrentDirectory, "Mods", "S1VoiceChat", "assets", fileName),
-            Path.Combine(Environment.CurrentDirectory, "Mods", "S1-VoiceChat", "assets", fileName),
-            Path.Combine(AppContext.BaseDirectory, "S1VoiceChat", "assets", fileName)
-        };
     }
 
     private static void DestroyTexture(Texture2D? texture)

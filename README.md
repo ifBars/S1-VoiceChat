@@ -25,7 +25,7 @@ Implemented foundation:
 - SteamNetworkLib raw packet transport adapter.
 - Dedicated-server relay core that preserves original speaker identity and rejects spoofed sender IDs.
 - Minimal MelonLoader bootstrap that initializes SteamNetworkLib and attaches the voice transport.
-- Opt-in live runtime behind `--s1vc-live-voice`.
+- Live runtime enabled by MelonPreferences by default on interactive clients.
 - WASAPI microphone capture with `auto` device selection that probes active inputs once and reuses the selected endpoint.
 - Native Opus encoding by default, with `Pcm16Codec` retained as an explicit debug/fallback codec.
 - Proximity recipient resolution from Schedule I player state with lobby-member fallback.
@@ -89,7 +89,7 @@ tests/Run-S1VoiceChatValidation.ps1 -Scenario P2P
 tests/Run-S1VoiceChatValidation.ps1 -Scenario Dedicated
 ```
 
-The P2P profile expects only the S1VoiceChat mod, `Mods/S1VoiceChat/assets`, SteamNetworkLib, and the WASAPI support libraries. The dedicated profile expects S1VoiceChat plus the matching DedicatedServerMod/S1API companion DLLs. Both profiles fail when `Mods/` is missing the expected DLLs/assets or contains extra mods that could contaminate voice-chat validation.
+The P2P profile expects only the S1VoiceChat mod, SteamNetworkLib, and the WASAPI/Opus support libraries. The dedicated profile expects S1VoiceChat plus the matching DedicatedServerMod/S1API companion DLLs. Both profiles fail when `Mods/` is missing the expected DLLs or contains extra mods that could contaminate voice-chat validation.
 
 To copy only the built S1VoiceChat DLLs into the checked installs before auditing:
 
@@ -137,17 +137,17 @@ tests/Run-S1VoiceChatDedicatedRelaySmoke.ps1 -Runtime Mono
 tests/Run-S1VoiceChatDedicatedRelaySmoke.ps1 -Runtime Il2Cpp
 ```
 
-This prepares clean isolated dedicated server/client installs, audits `Mods/`, `UserLibs/`, and `Mods/S1VoiceChat/assets`, waits for the DedicatedServerMod ready marker, auto-connects two clients with `--server-ip` and `--server-port`, and requires the receiver to observe the sender's S1VoiceChat packet through SteamNetworkLib's dedicated relay path.
+This prepares clean isolated dedicated server/client installs, audits `Mods/` and `UserLibs/`, waits for the DedicatedServerMod ready marker, auto-connects two clients with `--server-ip` and `--server-port`, and requires the receiver to observe the sender's S1VoiceChat packet through SteamNetworkLib's dedicated relay path.
 
 ## Live Voice Mode
 
-Live voice mode is opt-in:
+Live voice mode is enabled by default through `MelonPreferences` on interactive clients and remains disabled in batch/headless dedicated server processes. Manual launchers can still pass explicit flags when testing:
 
 ```powershell
 tests/Install-S1VoiceChatManualLocalLobby.ps1 -Runtime Il2Cpp -GamePath "D:\SteamLibrary\steamapps\common\Schedule I_public" -EnableLiveVoice
 ```
 
-The generated launchers add `--s1vc-live-voice --s1vc-ptt-key V --s1vc-voice-channel Global --s1vc-codec Opus --s1vc-capture-source wasapi --s1vc-mic-device auto`. Hold `V` to transmit voice audio. Voice packets are sent as raw SteamNetworkLib packets on logical P2P channel `3`, using unreliable/no-delay delivery. The manual `F8` packet probe remains enabled in the same launchers.
+The generated launchers add explicit test arguments such as `--s1vc-live-voice --s1vc-ptt-key V --s1vc-voice-channel Global --s1vc-codec Opus --s1vc-capture-source wasapi --s1vc-mic-device auto`. By default, normal installs use push-to-talk on `V`, Proximity routing, WASAPI capture with `auto` device selection, and Opus voice encoding. Voice packets are sent as raw SteamNetworkLib packets on logical P2P channel `3`, using unreliable/no-delay delivery. The manual `F8` packet probe remains enabled in the generated LocalLobby launchers.
 
 Opus is the production default at a 24 kbps voice bitrate. Use `--s1vc-codec Pcm16` or `--s1vc-pcm16` only for diagnostics or as an emergency fallback when native Opus cannot load. Each voice packet carries its codec id, so control packets and fallback PCM packets are not decoded as Opus audio.
 
@@ -157,6 +157,18 @@ When the Schedule I settings screen is available, S1 VoiceChat adds two controls
 - `Open Mic`: transmit continuously while live voice is active, persisted as `S1VoiceChat.OpenMic`.
 
 Push-to-talk is still the default. `--s1vc-open-mic` remains available for launcher-driven testing and forces open mic for that process.
+
+The MelonPreferences category `S1VoiceChat` also exposes:
+
+- `Enabled`: enable or disable interactive live voice.
+- `PushToTalkKey`: Unity `KeyCode` name, default `V`.
+- `VoiceChannel`: `Proximity`, `Whisper`, `Shout`, `Radio`, or `Global`.
+- `CaptureSource`: `Wasapi`, `Microphone`, or `Tone`.
+- `MicrophoneDevice`: `auto`, `default`, device index, device name, or blank for first Unity microphone.
+- `Codec`: `Opus` or `Pcm16`.
+- `OpusBitrate`: Opus bitrate in bits per second.
+- `ProximityRangeMeters`, `WhisperRangeMeters`, `ShoutRangeMeters`: routing distances.
+- `DiagnosticLogging`: verbose capture/status logging for troubleshooting.
 
 WASAPI is the default live capture source. The `auto` device selector probes active Windows capture endpoints once per live capture instance and chooses the endpoint producing nonzero PCM. This avoids repeatedly probing on every push-to-talk transition. Override it with `--s1vc-mic-device "<device name>"`, `--s1vc-mic-device-index <index>`, or `--s1vc-mic-device default`.
 
@@ -170,7 +182,7 @@ dotnet run --project tests/S1VoiceChat.WasapiProbe/S1VoiceChat.WasapiProbe.cspro
 
 For temporary client-side mute testing before the in-game mute menu exists, add `--s1vc-muted-peer <steamId>` for one peer or `--s1vc-muted-peers <steamId1,steamId2>` for a list. Muted peers are excluded from outgoing recipient selection.
 
-The live HUD indicator uses `assets/microphone.png` and `assets/mute.png`. The installer copies them to `Mods/S1VoiceChat/assets`. The HUD and live voice capture/playback are gated to the `Main` and `Tutorial` scenes so voice chat is not active in the Menu.
+The live HUD indicator embeds `assets/microphone.png` and `assets/mute.png` into the mod assembly and extracts them to `UserData/S1VoiceChat/assets` at runtime when needed. Users do not need to install or keep separate PNG files. The HUD and live voice capture/playback are gated to the `Main` and `Tutorial` scenes so voice chat is not active in the Menu.
 
 The automated smoke tests prove the S1VoiceChat packet path, including P2P LocalLobby and DedicatedServerMod relay on Mono and Il2Cpp. The WASAPI probe verifies local Windows capture endpoints. In-game live capture is validated by launching with `--s1vc-live-voice` and checking for nonzero `Energy`/`CapturePeak` with diagnostic logging enabled.
 

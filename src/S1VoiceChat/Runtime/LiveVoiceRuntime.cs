@@ -84,13 +84,13 @@ internal sealed class LiveVoiceRuntime : IDisposable
     public static LiveVoiceRuntime? TryCreate(MelonLogger.Instance logger)
     {
         var args = Environment.GetCommandLineArgs();
-        var enabled = false;
+        var enabled = VoiceChatPreferences.LiveVoiceEnabled;
         var openMic = false;
-        var voiceChannel = VoiceChannel.Global;
-        var captureSource = CaptureSource.Wasapi;
-        var codecKind = VoiceCodecKind.Opus;
-        var key = KeyCode.V;
-        string? microphoneDevice = "auto";
+        var voiceChannel = ParseVoiceChannel(VoiceChatPreferences.VoiceChannel);
+        var captureSource = ParseCaptureSource(VoiceChatPreferences.CaptureSource);
+        var codecKind = ParseCodec(VoiceChatPreferences.Codec);
+        var key = ParseKeyCode(VoiceChatPreferences.PushToTalkKey);
+        string? microphoneDevice = NormalizeMicrophoneDevice(VoiceChatPreferences.MicrophoneDevice, captureSource);
         var diagnosticLogging = false;
         var settings = new VoiceSettings
         {
@@ -99,6 +99,7 @@ internal sealed class LiveVoiceRuntime : IDisposable
             FrameSize = DefaultLiveFrameSize,
             MaxPacketsPerPeerPerSecond = 80
         };
+        VoiceChatPreferences.ApplyStartupTo(settings);
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -106,6 +107,10 @@ internal sealed class LiveVoiceRuntime : IDisposable
             if (arg == "--s1vc-live-voice")
             {
                 enabled = true;
+            }
+            else if (arg == "--s1vc-disable-live-voice")
+            {
+                enabled = false;
             }
             else if (arg == "--s1vc-open-mic")
             {
@@ -121,13 +126,11 @@ internal sealed class LiveVoiceRuntime : IDisposable
             }
             else if (arg == "--s1vc-voice-channel" && i + 1 < args.Length)
             {
-                if (!Enum.TryParse(args[++i], ignoreCase: true, out voiceChannel))
-                    voiceChannel = VoiceChannel.Global;
+                voiceChannel = ParseVoiceChannel(args[++i]);
             }
             else if (arg == "--s1vc-ptt-key" && i + 1 < args.Length)
             {
-                if (!Enum.TryParse(args[++i], ignoreCase: true, out key))
-                    key = KeyCode.V;
+                key = ParseKeyCode(args[++i]);
             }
             else if (arg == "--s1vc-sample-rate" && i + 1 < args.Length)
             {
@@ -136,31 +139,17 @@ internal sealed class LiveVoiceRuntime : IDisposable
             }
             else if (arg == "--s1vc-mic-device" && i + 1 < args.Length)
             {
-                microphoneDevice = args[++i];
+                microphoneDevice = NormalizeMicrophoneDevice(args[++i], captureSource);
             }
             else if (arg == "--s1vc-mic-device-index" && i + 1 < args.Length)
             {
-                microphoneDevice = args[++i];
+                microphoneDevice = NormalizeMicrophoneDevice(args[++i], captureSource);
             }
             else if (arg == "--s1vc-capture-source" && i + 1 < args.Length)
             {
                 var value = args[++i];
-                if (value.Equals("tone", StringComparison.OrdinalIgnoreCase))
-                {
-                    captureSource = CaptureSource.Tone;
-                    microphoneDevice = null;
-                }
-                else if (value.Equals("wasapi", StringComparison.OrdinalIgnoreCase))
-                {
-                    captureSource = CaptureSource.Wasapi;
-                    microphoneDevice ??= "auto";
-                }
-                else
-                {
-                    captureSource = CaptureSource.Microphone;
-                    if (string.Equals(microphoneDevice, "auto", StringComparison.OrdinalIgnoreCase))
-                        microphoneDevice = null;
-                }
+                captureSource = ParseCaptureSource(value);
+                microphoneDevice = NormalizeMicrophoneDevice(microphoneDevice, captureSource);
             }
             else if (arg == "--s1vc-test-tone")
             {
@@ -169,8 +158,7 @@ internal sealed class LiveVoiceRuntime : IDisposable
             }
             else if (arg == "--s1vc-codec" && i + 1 < args.Length)
             {
-                if (!VoiceCodecFactory.TryParse(args[++i], out codecKind))
-                    codecKind = VoiceCodecKind.Opus;
+                codecKind = ParseCodec(args[++i]);
             }
             else if (arg == "--s1vc-pcm16")
             {
@@ -204,6 +192,53 @@ internal sealed class LiveVoiceRuntime : IDisposable
 
         logger.Msg($"Live voice mode enabled. Capture={captureSource}|Codec={codecKind}|PushToTalkKey={key}|OpenMic={openMic}|Channel={voiceChannel}|SampleRate={settings.SampleRate}|FrameSize={settings.FrameSize}|OpusBitrate={settings.OpusBitrate}|MicDevice={microphoneDevice ?? "<first>"}|MutedPeers={muteList.Count}");
         return new LiveVoiceRuntime(logger, settings, muteList, key, openMic, diagnosticLogging, voiceChannel, captureSource, codecKind, microphoneDevice);
+    }
+
+    private static VoiceChannel ParseVoiceChannel(string value)
+    {
+        return Enum.TryParse(value, ignoreCase: true, out VoiceChannel channel)
+            ? channel
+            : VoiceChannel.Proximity;
+    }
+
+    private static CaptureSource ParseCaptureSource(string value)
+    {
+        if (value.Equals("tone", StringComparison.OrdinalIgnoreCase))
+            return CaptureSource.Tone;
+
+        if (value.Equals("microphone", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("unity", StringComparison.OrdinalIgnoreCase))
+            return CaptureSource.Microphone;
+
+        return CaptureSource.Wasapi;
+    }
+
+    private static VoiceCodecKind ParseCodec(string value)
+    {
+        return VoiceCodecFactory.TryParse(value, out var codecKind)
+            ? codecKind
+            : VoiceCodecKind.Opus;
+    }
+
+    private static KeyCode ParseKeyCode(string value)
+    {
+        return Enum.TryParse(value, ignoreCase: true, out KeyCode key)
+            ? key
+            : KeyCode.V;
+    }
+
+    private static string? NormalizeMicrophoneDevice(string? value, CaptureSource captureSource)
+    {
+        if (captureSource == CaptureSource.Tone)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(value))
+            return captureSource == CaptureSource.Wasapi ? "auto" : null;
+
+        if (captureSource == CaptureSource.Microphone && value.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return value.Trim();
     }
 
     public void Update(SteamNetworkClient client, SnlVoiceTransport transport, ulong localPeerId)

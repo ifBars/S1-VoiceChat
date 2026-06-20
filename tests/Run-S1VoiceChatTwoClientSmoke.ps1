@@ -201,13 +201,7 @@ function Assert-P2PSmokeInstall {
         throw "P2P smoke UserLibs mismatch. Expected: $($expectedUserLibs -join ', '). Actual: $($userLibs -join ', ')."
     }
 
-    $assetsPath = Join-Path $modsPath "S1VoiceChat\assets"
-    $assets = @(Get-ChildItem -LiteralPath $assetsPath -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name | Sort-Object)
-    $expectedAssets = @("microphone.png", "mute.png") | Sort-Object
-    $missingAssets = @($expectedAssets | Where-Object { $_ -notin $assets })
-    if ($missingAssets.Count -gt 0) {
-        throw "P2P smoke S1VoiceChat assets mismatch. Missing: $($missingAssets -join ', '). Actual: $($assets -join ', ')."
-    }
+    Write-Host "P2P smoke S1VoiceChat HUD assets are embedded in the mod assembly." -ForegroundColor Gray
 }
 
 function New-IsolatedP2PInstall {

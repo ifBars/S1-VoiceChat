@@ -188,27 +188,21 @@ if (-not $SkipBuild) {
 $modSource = Join-Path $repoRoot "src\S1VoiceChat\bin\$configuration\$(if ($Runtime -eq 'Mono') { 'netstandard2.1' } else { 'net6.0' })\$assemblyName"
 $snlSource = Join-Path $repoRoot "..\SteamNetworkLib\bin\$snlRuntime\netstandard2.1\SteamNetworkLib.dll"
 $localLobbySource = Get-LocalLobbyDll -RuntimeName $Runtime -CacheRoot $dependencyCacheRoot
-$assetsSource = Join-Path $repoRoot "assets"
 
 Assert-Path $modSource "S1VoiceChat build output"
 Assert-Path $snlSource "SteamNetworkLib build output"
 Assert-Path $localLobbySource "LocalLobby DLL"
-Assert-Path $assetsSource "S1VoiceChat assets"
 
 $modsPath = Join-Path $GamePath "Mods"
 $userLibsPath = Join-Path $GamePath "UserLibs"
 $launchersPath = Join-Path $GamePath "UserData\S1VoiceChat"
-$modAssetsPath = Join-Path $modsPath "S1VoiceChat\assets"
-New-Item -ItemType Directory -Path $modsPath, $userLibsPath, $launchersPath, $modAssetsPath -Force | Out-Null
+New-Item -ItemType Directory -Path $modsPath, $userLibsPath, $launchersPath -Force | Out-Null
 
 Write-Step "Deploy manual test files"
 Copy-Item -LiteralPath $modSource -Destination (Join-Path $modsPath $assemblyName) -Force
 Copy-Item -LiteralPath $localLobbySource -Destination (Join-Path $modsPath (Split-Path -Leaf $localLobbySource)) -Force
 Copy-Item -LiteralPath $snlSource -Destination (Join-Path $userLibsPath "SteamNetworkLib.dll") -Force
 Copy-VoiceChatUserLibDependencies -BuildOutputDir (Split-Path -Parent $modSource) -TargetUserLibsPath $userLibsPath
-Get-ChildItem -LiteralPath $assetsSource -File -Force | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $modAssetsPath $_.Name) -Force
-}
 
 $unexpectedMods = @(Get-ChildItem -LiteralPath $modsPath -File |
     Where-Object { $_.Name -notin @($assemblyName, (Split-Path -Leaf $localLobbySource)) } |

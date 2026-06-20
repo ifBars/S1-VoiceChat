@@ -102,21 +102,16 @@ if (-not $SkipBuild) {
 
 $modSource = Join-Path $repoRoot "src\S1VoiceChat\bin\$configuration\$(if ($Runtime -eq 'Mono') { 'netstandard2.1' } else { 'net6.0' })\$assemblyName"
 $snlSource = Join-Path $repoRoot "..\SteamNetworkLib\bin\$snlRuntime\netstandard2.1\SteamNetworkLib.dll"
-$assetsSource = Join-Path $repoRoot "assets"
 
 Assert-Path $modSource "S1VoiceChat build output"
 Assert-Path $snlSource "SteamNetworkLib build output"
-Assert-Path $assetsSource "S1VoiceChat assets"
 
-New-Item -ItemType Directory -Path $modsPath, $userLibsPath, $launchersPath, (Join-Path $modsPath "S1VoiceChat\assets") -Force | Out-Null
+New-Item -ItemType Directory -Path $modsPath, $userLibsPath, $launchersPath -Force | Out-Null
 
 Write-Step "Deploy S1VoiceChat"
 Copy-Item -LiteralPath $modSource -Destination (Join-Path $modsPath $assemblyName) -Force
 Copy-Item -LiteralPath $snlSource -Destination (Join-Path $userLibsPath "SteamNetworkLib.dll") -Force
 Copy-VoiceChatUserLibDependencies -BuildOutputDir (Split-Path -Parent $modSource) -TargetUserLibsPath $userLibsPath
-Get-ChildItem -LiteralPath $assetsSource -File -Force | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $modsPath "S1VoiceChat\assets\$($_.Name)") -Force
-}
 
 if (-not (Test-Path -LiteralPath $goldbergBackup)) {
     Write-Step "Back up current steam_api64.dll as Goldberg"

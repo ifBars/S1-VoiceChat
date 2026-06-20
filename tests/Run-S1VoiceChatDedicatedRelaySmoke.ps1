@@ -267,13 +267,7 @@ function Assert-DedicatedSmokeInstall {
         throw "$Side dedicated smoke UserLibs mismatch. Expected: $($expectedUserLibs -join ', '). Actual: $($userLibs -join ', ')."
     }
 
-    $assetsPath = Join-Path $modsPath "S1VoiceChat\assets"
-    $assets = @(Get-ChildItem -LiteralPath $assetsPath -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name | Sort-Object)
-    $expectedAssets = @("microphone.png", "mute.png") | Sort-Object
-    $missingAssets = @($expectedAssets | Where-Object { $_ -notin $assets })
-    if ($missingAssets.Count -gt 0) {
-        throw "$Side dedicated smoke S1VoiceChat assets mismatch. Missing: $($missingAssets -join ', '). Actual: $($assets -join ', ')."
-    }
+    Write-Host "$Side dedicated smoke S1VoiceChat HUD assets are embedded in the mod assembly." -ForegroundColor Gray
 }
 
 function New-IsolatedDedicatedInstalls {
