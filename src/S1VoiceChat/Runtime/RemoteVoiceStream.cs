@@ -62,7 +62,11 @@ public sealed class RemoteVoiceStream : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+            return;
+
         _disposed = true;
         _audioBuffer.Clear();
+        _codec.Dispose();
     }
 }
