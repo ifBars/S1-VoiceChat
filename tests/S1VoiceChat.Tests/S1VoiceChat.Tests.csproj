@@ -8,6 +8,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="OpusSharp.Natives" Version="1.5.2.1" GeneratePathProperty="true" PrivateAssets="all" />
     <ProjectReference Include="..\..\src\S1VoiceChat\S1VoiceChat.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyNativeOpus" AfterTargets="CopyFilesToOutputDirectory">
+    <PropertyGroup>
+      <NativeOpusSource>$(NuGetPackageRoot)opussharp.natives\1.5.2.1\runtimes\win-x64\native\opus.dll</NativeOpusSource>
+    </PropertyGroup>
+    <Copy SourceFiles="$(NativeOpusSource)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" Condition="Exists('$(NativeOpusSource)')" />
+  </Target>
 </Project>

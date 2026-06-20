@@ -194,7 +194,7 @@ function Assert-P2PSmokeInstall {
     }
 
     $userLibs = @(Get-ChildItem -LiteralPath $userLibsPath -File | Select-Object -ExpandProperty Name | Sort-Object)
-    $expectedUserLibs = @("NAudio.Core.dll", "NAudio.Wasapi.dll", "SteamNetworkLib.dll") | Sort-Object
+    $expectedUserLibs = @("NAudio.Core.dll", "NAudio.Wasapi.dll", "opus.dll", "SteamNetworkLib.dll") | Sort-Object
     $unexpectedUserLibs = @($userLibs | Where-Object { $_ -notin $expectedUserLibs })
     $missingUserLibs = @($expectedUserLibs | Where-Object { $_ -notin $userLibs })
     if ($unexpectedUserLibs.Count -gt 0 -or $missingUserLibs.Count -gt 0) {

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace S1VoiceChat.Network;
 
 /// <summary>
-/// Dedicated-server relay for compressed voice packets.
+/// Dedicated-server relay for encoded voice packets.
 /// </summary>
 public sealed class VoiceRelayService : IDisposable
 {

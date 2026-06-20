@@ -19,6 +19,7 @@ var tests = new (string Name, Action Run)[]
     ("VoiceSession uses packet sender for relayed packets", VoiceSessionUsesPacketSenderForRelayedPackets),
     ("RemoteVoiceStream tracks packet channel", RemoteVoiceStreamTracksPacketChannel),
     ("Pcm16Codec round-trips little-endian samples", Pcm16CodecRoundTrips),
+    ("NativeOpusCodec round-trips nonzero voice frames when native library is present", NativeOpusCodecRoundTripsWhenAvailable),
     ("SyntheticToneCapture emits nonzero PCM", SyntheticToneCaptureEmitsNonzeroPcm),
     ("VoiceSession unsubscribes from transport on dispose", VoiceSessionUnsubscribesOnDispose),
     ("SnlVoiceTransport sends raw packets through adapter", SnlVoiceTransportSendsRawPackets),
@@ -61,6 +62,7 @@ static void VoicePacketRoundTrips()
     {
         Version = 1,
         Channel = (byte)VoiceChannel.Proximity,
+        Codec = VoiceCodecKind.Opus,
         Sequence = 42,
         CaptureTimeMs = 123456,
         SenderPeerId = 76561198000000029,
@@ -71,6 +73,7 @@ static void VoicePacketRoundTrips()
 
     AssertEqual(packet.Version, restored.Version);
     AssertEqual(packet.Channel, restored.Channel);
+    AssertEqual(packet.Codec, restored.Codec);
     AssertEqual(packet.Sequence, restored.Sequence);
     AssertEqual(packet.CaptureTimeMs, restored.CaptureTimeMs);
     AssertEqual(packet.SenderPeerId, restored.SenderPeerId);
@@ -150,7 +153,7 @@ static void VoiceSessionSendsTargetedPackets()
 {
     var transport = new RecordingVoiceTransport();
     using var codec = new FakeVoiceCodec(48000, 1);
-    using var session = new VoiceSession(100, transport, codec, new VoiceSettings());
+    using var session = new VoiceSession(100, transport, codec, new VoiceSettings(), VoiceCodecKind.Pcm16);
 
     session.SendPcmFrame(new short[] { 1, 2, 3, 4 }, VoiceChannel.Proximity, new ulong[] { 200, 300 });
 
@@ -159,6 +162,7 @@ static void VoiceSessionSendsTargetedPackets()
     AssertEqual((ulong)200, transport.Sent[0].PeerId);
     AssertEqual((ulong)300, transport.Sent[1].PeerId);
     AssertEqual((ulong)100, transport.Sent[0].Packet.SenderPeerId);
+    AssertEqual(VoiceCodecKind.Pcm16, transport.Sent[0].Packet.Codec);
     AssertSequence(new byte[] { 1, 2, 3, 4 }, transport.Sent[0].Packet.Payload);
 }
 
@@ -171,10 +175,12 @@ static void VoiceSessionUsesPacketSenderForRelayedPackets()
         transport,
         codec,
         new VoiceSettings(),
-        () => new FakeVoiceCodec(48000, 1));
+        VoiceCodecKind.Pcm16,
+        _ => new FakeVoiceCodec(48000, 1));
 
     transport.Raise(999, new VoicePacket
     {
+        Codec = VoiceCodecKind.Pcm16,
         SenderPeerId = 200,
         Sequence = 1,
         Payload = new byte[] { 10, 20 }
@@ -186,15 +192,53 @@ static void VoiceSessionUsesPacketSenderForRelayedPackets()
 
 static void RemoteVoiceStreamTracksPacketChannel()
 {
-    using var stream = new RemoteVoiceStream(200, new FakeVoiceCodec(48000, 1), new VoiceSettings());
+    using var stream = new RemoteVoiceStream(200, _ => new FakeVoiceCodec(48000, 1), new VoiceSettings());
     stream.AddPacket(new VoicePacket
     {
         Channel = (byte)VoiceChannel.Proximity,
+        Codec = VoiceCodecKind.Pcm16,
         Sequence = 1,
         Payload = new byte[] { 10, 20 }
     });
 
     AssertEqual(VoiceChannel.Proximity, stream.LastChannel);
+}
+
+static void NativeOpusCodecRoundTripsWhenAvailable()
+{
+    var options = new VoiceCodecOptions
+    {
+        SampleRate = 48000,
+        Channels = 1,
+        FrameSize = 480,
+        OpusBitrate = 24000
+    };
+
+    try
+    {
+        using var codec = new NativeOpusCodec(options);
+        var pcm = new short[options.FrameSize];
+        for (var i = 0; i < pcm.Length; i++)
+            pcm[i] = (short)(Math.Sin(i / 48000d * 440d * Math.PI * 2d) * short.MaxValue * 0.35);
+
+        var encoded = new byte[VoicePacket.MaxPayloadBytes];
+        var decoded = new short[options.FrameSize];
+        var encodedLength = codec.Encode(pcm, encoded);
+        var decodedFrames = codec.Decode(encoded.AsSpan(0, encodedLength), decoded);
+
+        AssertTrue(encodedLength > 0, "Opus should produce a non-empty encoded frame.");
+        AssertTrue(encodedLength < pcm.Length * sizeof(short), "Opus payload should be smaller than raw PCM.");
+        AssertEqual(options.FrameSize, decodedFrames);
+        AssertTrue(VoiceDiagnostics.SumAbsolutePcm(decoded) > 0, "Decoded Opus PCM should have nonzero energy.");
+    }
+    catch (DllNotFoundException)
+    {
+        Console.WriteLine("SKIP NativeOpusCodec native library is not available in this test output.");
+    }
+    catch (BadImageFormatException)
+    {
+        Console.WriteLine("SKIP NativeOpusCodec native library architecture does not match this process.");
+    }
 }
 
 static void Pcm16CodecRoundTrips()
@@ -228,10 +272,10 @@ static void VoiceSessionUnsubscribesOnDispose()
 {
     var transport = new RecordingVoiceTransport();
     var codec = new FakeVoiceCodec(48000, 1);
-    var session = new VoiceSession(100, transport, codec, new VoiceSettings());
+    var session = new VoiceSession(100, transport, codec, new VoiceSettings(), VoiceCodecKind.Pcm16);
     session.Dispose();
 
-    transport.Raise(200, new VoicePacket { Payload = new byte[] { 1 } });
+    transport.Raise(200, new VoicePacket { Codec = VoiceCodecKind.Pcm16, Payload = new byte[] { 1 } });
     AssertEqual(0, session.RemoteStreams.Count);
 }
 

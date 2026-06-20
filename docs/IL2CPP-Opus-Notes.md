@@ -8,7 +8,7 @@ The older audio streaming experiment was useful architecturally, but the OpusSha
 
 ## Current approach
 
-Use direct P/Invoke against native Opus:
+Use direct P/Invoke against native Opus for live voice:
 
 - `opus_encoder_create`
 - `opus_encode`
@@ -39,11 +39,11 @@ Sample rate: 48000 Hz
 Channels: 1
 Frame size: 960 samples
 Frame duration: 20 ms
-Bitrate: default encoder bitrate unless native Opus experiments later add `opus_encoder_ctl`
+Bitrate: 24000 bps default
 Transport: unreliable/no-delay
 Jitter target: 3 packets
 ```
 
 ## Native binary placement
 
-For Windows mod builds, ship `opus.dll` beside the mod DLL or ensure the mod folder is in the DLL search path before constructing `NativeOpusCodec`.
+For Windows mod builds, ship `opus.dll` in `UserLibs` or beside the mod DLL. `NativeOpusCodec` preloads from both locations before constructing the encoder.

@@ -1,16 +1,18 @@
 using System;
 using System.IO;
+using S1VoiceChat.Codec;
 
 namespace S1VoiceChat.Network;
 
 public sealed class VoicePacket
 {
-    public const int HeaderLength = 18;
+    public const int HeaderLength = 19;
     public const int MaxWireBytes = 1200;
     public const int MaxPayloadBytes = MaxWireBytes - HeaderLength;
 
     public byte Version { get; set; } = 1;
     public byte Channel { get; set; }
+    public VoiceCodecKind Codec { get; set; } = VoiceCodecKind.Control;
     public ushort Sequence { get; set; }
     public uint CaptureTimeMs { get; set; }
     public ulong SenderPeerId { get; set; }
@@ -26,6 +28,7 @@ public sealed class VoicePacket
 
         bw.Write(Version);
         bw.Write(Channel);
+        bw.Write((byte)Codec);
         bw.Write(Sequence);
         bw.Write(CaptureTimeMs);
         bw.Write(SenderPeerId);
@@ -49,6 +52,7 @@ public sealed class VoicePacket
         var packet = new VoicePacket();
         packet.Version = br.ReadByte();
         packet.Channel = br.ReadByte();
+        packet.Codec = (VoiceCodecKind)br.ReadByte();
         packet.Sequence = br.ReadUInt16();
         packet.CaptureTimeMs = br.ReadUInt32();
         packet.SenderPeerId = br.ReadUInt64();

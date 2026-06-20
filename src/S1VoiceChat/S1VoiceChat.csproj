@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="OpusSharp.Natives" Version="1.5.2.1" GeneratePathProperty="true" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(Configuration)' == 'MonoMelon'">
@@ -135,4 +136,11 @@
       <HintPath>$(MelonLoaderIl2CppPath)\Unity.TextMeshPro.dll</HintPath>
     </Reference>
   </ItemGroup>
+
+  <Target Name="CopyNativeOpus" AfterTargets="CopyFilesToOutputDirectory">
+    <PropertyGroup>
+      <NativeOpusSource>$(NuGetPackageRoot)opussharp.natives\1.5.2.1\runtimes\win-x64\native\opus.dll</NativeOpusSource>
+    </PropertyGroup>
+    <Copy SourceFiles="$(NativeOpusSource)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" Condition="Exists('$(NativeOpusSource)')" />
+  </Target>
 </Project>

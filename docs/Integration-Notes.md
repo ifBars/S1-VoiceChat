@@ -11,7 +11,7 @@
 - Dedicated Il2Cpp client.
 - Dedicated Il2Cpp server.
 
-Regular P2P packet exchange has been validated with the automated LocalLobby two-client smoke test on Mono and Il2Cpp. Dedicated relay packet exchange has been validated with the automated two-client plus server smoke test on Mono and Il2Cpp. The live path now uses WASAPI PCM capture and SteamNetworkLib raw packet delivery on logical P2P channel `3`.
+Regular P2P packet exchange has been validated with the automated LocalLobby two-client smoke test on Mono and Il2Cpp. Dedicated relay packet exchange has been validated with the automated two-client plus server smoke test on Mono and Il2Cpp. The live path now uses WASAPI capture, native Opus encoding by default, and SteamNetworkLib raw packet delivery on logical P2P channel `3`.
 
 The packet header now carries `SenderPeerId`, so a dedicated server can forward a voice packet while clients still key playback by the original speaker instead of the relay server. `VoiceRelayService` validates that the claimed sender matches the network sender before forwarding and drops spoofed packets.
 
@@ -43,7 +43,7 @@ Future polish ideas:
 
 ## Voice capture
 
-Current live mode uses WASAPI by default. Unity `Microphone`, native Opus, and Steam Voice remain experiment/probe paths only.
+Current live mode uses WASAPI capture and native Opus by default. Unity `Microphone`, PCM16, and Steam Voice remain fallback/debug/probe paths only.
 
 Rules:
 
@@ -53,7 +53,7 @@ Rules:
 - Do not create capture in batch/headless dedicated-server mode.
 - Tear down capture, playback, and live packet subscriptions outside `Main` and `Tutorial`.
 - Keep verbose capture/status diagnostics behind `S1VoiceChat.DiagnosticLogging` or explicit debug launch flags.
-- Keep native Opus / Unity microphone / Steam Voice experiments separate from the current live runtime.
+- Keep Unity microphone / Steam Voice experiments separate from the current live runtime.
 
 ## Unity playback
 
@@ -73,7 +73,7 @@ Current implementation:
 
 - `VoicePacket.SenderPeerId` preserves original speaker identity across relay.
 - `VoiceSession` keys remote streams by packet sender when a relay server is the network sender.
-- `VoiceRelayService` validates and forwards compressed packets through `IVoiceTransport`.
+- `VoiceRelayService` validates and forwards encoded packets through `IVoiceTransport`.
 - `VoiceRelayService` applies per-peer packet rate limiting before forwarding.
 - SteamNetworkLib's `DedicatedRelay` compatibility path has two-client runtime smoke coverage through DedicatedServerMod on Mono and Il2Cpp.
 

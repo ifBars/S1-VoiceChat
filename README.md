@@ -2,7 +2,7 @@
 
 Voice chat mod for Schedule I.
 
-The current live path uses WASAPI PCM capture/playback with SteamNetworkLib packet transport.
+The current live path uses WASAPI microphone capture, native Opus voice encoding, Unity playback, and SteamNetworkLib packet transport.
 
 ## Goals
 
@@ -18,7 +18,7 @@ The current live path uses WASAPI PCM capture/playback with SteamNetworkLib pack
 Implemented foundation:
 
 - `IVoiceCodec` abstraction.
-- `NativeOpusCodec` wrapper remains available for non-Steam codec experiments.
+- `NativeOpusCodec` wrapper for production live voice.
 - Binary `VoicePacket` encode/decode helpers.
 - `IVoiceTransport` abstraction.
 - Loopback transport for local pipeline testing.
@@ -27,6 +27,7 @@ Implemented foundation:
 - Minimal MelonLoader bootstrap that initializes SteamNetworkLib and attaches the voice transport.
 - Opt-in live runtime behind `--s1vc-live-voice`.
 - WASAPI microphone capture with `auto` device selection that probes active inputs once and reuses the selected endpoint.
+- Native Opus encoding by default, with `Pcm16Codec` retained as an explicit debug/fallback codec.
 - Proximity recipient resolution from Schedule I player state with lobby-member fallback.
 - Small push-to-talk HUD indicator in `Main` and `Tutorial` only.
 - Audio settings integration for received voice volume and open-mic mode.
@@ -61,7 +62,7 @@ Copy `src/S1VoiceChat/local.build.props.template` to `src/S1VoiceChat/local.buil
 
 1. Run the core unit harness.
 2. Build both `MonoMelon` and `Il2CppMelon`.
-3. Run the WASAPI probe with `--device auto --play-test-tone --require-nonzero`.
+3. Run the native Opus and WASAPI probe tests.
 4. Run isolated install validation for P2P and dedicated profiles.
 5. Run the LocalLobby P2P smoke when transport behavior changes.
 6. Run the DedicatedServerMod relay smoke when relay behavior changes.
@@ -146,7 +147,9 @@ Live voice mode is opt-in:
 tests/Install-S1VoiceChatManualLocalLobby.ps1 -Runtime Il2Cpp -GamePath "D:\SteamLibrary\steamapps\common\Schedule I_public" -EnableLiveVoice
 ```
 
-The generated launchers add `--s1vc-live-voice --s1vc-ptt-key V --s1vc-voice-channel Global --s1vc-capture-source wasapi --s1vc-mic-device auto`. Hold `V` to transmit voice audio. Voice packets are sent as raw SteamNetworkLib packets on logical P2P channel `3`, using unreliable/no-delay delivery. The manual `F8` packet probe remains enabled in the same launchers.
+The generated launchers add `--s1vc-live-voice --s1vc-ptt-key V --s1vc-voice-channel Global --s1vc-codec Opus --s1vc-capture-source wasapi --s1vc-mic-device auto`. Hold `V` to transmit voice audio. Voice packets are sent as raw SteamNetworkLib packets on logical P2P channel `3`, using unreliable/no-delay delivery. The manual `F8` packet probe remains enabled in the same launchers.
+
+Opus is the production default at a 24 kbps voice bitrate. Use `--s1vc-codec Pcm16` or `--s1vc-pcm16` only for diagnostics or as an emergency fallback when native Opus cannot load. Each voice packet carries its codec id, so control packets and fallback PCM packets are not decoded as Opus audio.
 
 When the Schedule I settings screen is available, S1 VoiceChat adds two controls to the Audio settings panel:
 
@@ -181,17 +184,19 @@ Proximity mode resolves `ScheduleOne.PlayerScripts.Player.PlayerList`, maps `Pla
 
 In dedicated-server sessions, SteamNetworkLib switches to its `DedicatedRelay` compatibility path and sends the same S1VoiceChat packets through DedicatedServerMod custom messaging. The server process relays bytes; it does not create microphone capture, audio playback, or the HUD.
 
-## Native Opus dependency
+## Native Opus Dependency
 
-Do not use OpusSharp for IL2CPP. `NativeOpusCodec` is retained for codec experiments, but the current live runtime uses the managed PCM codec and does not require `opus.dll`. If the native codec is used later, ship a native Opus binary next to the mod, for example:
+Do not use OpusSharp for IL2CPP live voice. S1 VoiceChat calls libopus directly through `NativeOpusCodec` and uses `OpusSharp.Natives` only as a source for the Windows native `opus.dll`. Installers copy `opus.dll` to `UserLibs` next to `NAudio.Core.dll`, `NAudio.Wasapi.dll`, and `SteamNetworkLib.dll`:
 
 ```text
-Mods/S1VoiceChat/
-S1VoiceChat.dll
+UserLibs/
+SteamNetworkLib.dll
+NAudio.Core.dll
+NAudio.Wasapi.dll
 opus.dll
 ```
 
-On Windows, the P/Invoke target is currently `opus`. This usually resolves to `opus.dll`.
+On Windows, the P/Invoke target is `opus`. `NativeOpusCodec` preloads `opus.dll` from the game root, `UserLibs`, the mod assembly directory, or `Mods/S1VoiceChat` before the first encode/decode call.
 
 ## Project layout
 
@@ -208,4 +213,4 @@ Utilities/
 
 ## Notes
 
-The original SteamNetworkLib audio streaming example was designed for music-like streaming and was Mono-gated because OpusSharp had IL2CPP marshaling issues. This repo takes the safer approach: manual packet serialization, small mono VOIP frames, WASAPI capture, and transport abstraction.
+The original SteamNetworkLib audio streaming example was designed for music-like streaming and was Mono-gated because OpusSharp had IL2CPP marshaling issues. This repo takes the safer approach: direct native Opus P/Invoke, manual packet serialization, small mono VOIP frames, WASAPI capture, and transport abstraction.

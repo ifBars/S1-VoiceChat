@@ -1,5 +1,6 @@
 namespace S1VoiceChat.Runtime;
 
+using S1VoiceChat.Codec;
 using S1VoiceChat.Network;
 
 public sealed class VoiceSettings
@@ -8,6 +9,12 @@ public sealed class VoiceSettings
     public int Channels { get; set; } = 1;
     public int FrameSize { get; set; } = 960;
     public int MaxEncodedBytesPerFrame { get; set; } = VoicePacket.MaxPayloadBytes;
+    public VoiceCodecKind Codec { get; set; } = VoiceCodecKind.Opus;
+    public int OpusBitrate { get; set; } = VoiceCodecOptions.DefaultOpusBitrate;
+    public int OpusComplexity { get; set; } = VoiceCodecOptions.DefaultOpusComplexity;
+    public int OpusExpectedPacketLossPercent { get; set; } = VoiceCodecOptions.DefaultOpusExpectedPacketLossPercent;
+    public bool OpusInbandFecEnabled { get; set; } = true;
+    public bool OpusDtxEnabled { get; set; } = false;
     public float OutputVolume { get; set; } = 1f;
 
     public float ProximityRangeMeters { get; set; } = 25f;

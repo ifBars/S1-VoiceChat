@@ -169,7 +169,7 @@ function Copy-VoiceChatUserLibDependencies {
     $userLibsDir = Join-Path $GamePath "UserLibs"
     New-Item -ItemType Directory -Path $userLibsDir -Force | Out-Null
 
-    foreach ($dependency in @("NAudio.Core.dll", "NAudio.Wasapi.dll")) {
+    foreach ($dependency in @("NAudio.Core.dll", "NAudio.Wasapi.dll", "opus.dll")) {
         $source = Join-Path $sourceDir $dependency
         Assert-Path $source "$Label voice dependency"
         Copy-Item -LiteralPath $source -Destination (Join-Path $userLibsDir $dependency) -Force
@@ -459,7 +459,7 @@ $monoS1ApiDll = Join-Path $workspaceRoot "S1API\S1API\bin\MonoMelon\netstandard2
 $il2cppS1ApiDll = Join-Path $workspaceRoot "S1API\S1API\bin\Il2CppMelon\net6.0\S1API.dll"
 $voiceAssetsDir = Join-Path $repoRoot "assets"
 $requiredVoiceAssetFiles = @("microphone.png", "mute.png")
-$requiredVoiceUserLibs = @("SteamNetworkLib.dll|SteamNetworkLib-Mono.dll|SteamNetworkLib-IL2Cpp.dll", "NAudio.Core.dll", "NAudio.Wasapi.dll")
+$requiredVoiceUserLibs = @("SteamNetworkLib.dll|SteamNetworkLib-Mono.dll|SteamNetworkLib-IL2Cpp.dll", "NAudio.Core.dll", "NAudio.Wasapi.dll", "opus.dll")
 
 Write-Host "S1VoiceChat validation" -ForegroundColor Cyan
 Write-Host "Repo: $repoRoot" -ForegroundColor Gray

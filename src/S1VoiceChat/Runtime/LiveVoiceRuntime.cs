@@ -43,6 +43,7 @@ internal sealed class LiveVoiceRuntime : IDisposable
     private readonly bool _forceDiagnosticLogging;
     private readonly VoiceChannel _voiceChannel;
     private readonly CaptureSource _captureSource;
+    private readonly VoiceCodecKind _codecKind;
     private readonly string? _microphoneDevice;
     private readonly PttHudOverlay _hudOverlay;
     private readonly short[] _captureFrame;
@@ -63,7 +64,7 @@ internal sealed class LiveVoiceRuntime : IDisposable
     private bool _disabled;
     private bool _disposed;
 
-    private LiveVoiceRuntime(MelonLogger.Instance logger, VoiceSettings settings, VoiceMuteList muteList, KeyCode pushToTalkKey, bool openMic, bool diagnosticLogging, VoiceChannel voiceChannel, CaptureSource captureSource, string? microphoneDevice)
+    private LiveVoiceRuntime(MelonLogger.Instance logger, VoiceSettings settings, VoiceMuteList muteList, KeyCode pushToTalkKey, bool openMic, bool diagnosticLogging, VoiceChannel voiceChannel, CaptureSource captureSource, VoiceCodecKind codecKind, string? microphoneDevice)
     {
         _logger = logger;
         _settings = settings;
@@ -74,6 +75,7 @@ internal sealed class LiveVoiceRuntime : IDisposable
         _forceDiagnosticLogging = diagnosticLogging;
         _voiceChannel = voiceChannel;
         _captureSource = captureSource;
+        _codecKind = codecKind;
         _microphoneDevice = microphoneDevice;
         _hudOverlay = new PttHudOverlay(logger, pushToTalkKey);
         _captureFrame = new short[settings.FrameSize * settings.Channels];
@@ -86,6 +88,7 @@ internal sealed class LiveVoiceRuntime : IDisposable
         var openMic = false;
         var voiceChannel = VoiceChannel.Global;
         var captureSource = CaptureSource.Wasapi;
+        var codecKind = VoiceCodecKind.Opus;
         var key = KeyCode.V;
         string? microphoneDevice = "auto";
         var diagnosticLogging = false;
@@ -164,9 +167,26 @@ internal sealed class LiveVoiceRuntime : IDisposable
                 captureSource = CaptureSource.Tone;
                 microphoneDevice = null;
             }
+            else if (arg == "--s1vc-codec" && i + 1 < args.Length)
+            {
+                if (!VoiceCodecFactory.TryParse(args[++i], out codecKind))
+                    codecKind = VoiceCodecKind.Opus;
+            }
+            else if (arg == "--s1vc-pcm16")
+            {
+                codecKind = VoiceCodecKind.Pcm16;
+            }
+            else if (arg == "--s1vc-opus-bitrate" && i + 1 < args.Length)
+            {
+                if (int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out var bitrate) && bitrate > 0)
+                    settings.OpusBitrate = bitrate;
+            }
         }
 
         settings.FrameSize = Math.Min(Math.Max(160, settings.SampleRate / 100), VoicePacket.MaxPayloadBytes / (settings.Channels * sizeof(short)));
+        settings.Codec = codecKind;
+        if (codecKind == VoiceCodecKind.Opus)
+            settings.FrameSize = GetNearestOpusFrameSize(settings.SampleRate, settings.FrameSize);
 
         if (!LiveVoiceRuntimePolicy.CanCreateLiveVoice(enabled, Application.isBatchMode))
         {
@@ -182,8 +202,8 @@ internal sealed class LiveVoiceRuntime : IDisposable
         settings.PushToTalkEnabled = !settings.OpenMicEnabled;
         settings.DiagnosticLoggingEnabled = settings.DiagnosticLoggingEnabled || diagnosticLogging;
 
-        logger.Msg($"Live voice mode enabled. Capture={captureSource}|Codec=Pcm16|PushToTalkKey={key}|OpenMic={openMic}|Channel={voiceChannel}|SampleRate={settings.SampleRate}|FrameSize={settings.FrameSize}|MicDevice={microphoneDevice ?? "<first>"}|MutedPeers={muteList.Count}");
-        return new LiveVoiceRuntime(logger, settings, muteList, key, openMic, diagnosticLogging, voiceChannel, captureSource, microphoneDevice);
+        logger.Msg($"Live voice mode enabled. Capture={captureSource}|Codec={codecKind}|PushToTalkKey={key}|OpenMic={openMic}|Channel={voiceChannel}|SampleRate={settings.SampleRate}|FrameSize={settings.FrameSize}|OpusBitrate={settings.OpusBitrate}|MicDevice={microphoneDevice ?? "<first>"}|MutedPeers={muteList.Count}");
+        return new LiveVoiceRuntime(logger, settings, muteList, key, openMic, diagnosticLogging, voiceChannel, captureSource, codecKind, microphoneDevice);
     }
 
     public void Update(SteamNetworkClient client, SnlVoiceTransport transport, ulong localPeerId)
@@ -248,15 +268,17 @@ internal sealed class LiveVoiceRuntime : IDisposable
         {
             _capture = CreateCapture();
             _captureDiagnostics = _capture as IVoiceCaptureDiagnostics;
+            var localCodecKind = ResolveLocalCodecKind();
             _session = new VoiceSession(
                 localPeerId,
                 transport,
-                new Pcm16Codec(_settings.SampleRate, _settings.Channels, _settings.FrameSize),
+                CreateCodec(localCodecKind),
                 _settings,
-                () => new Pcm16Codec(_settings.SampleRate, _settings.Channels, _settings.FrameSize));
+                localCodecKind,
+                CreateCodecForRemote);
             _playback = new UnityVoicePlaybackSink(_settings.SampleRate, _settings.Channels, _settings.FrameSize, _settings);
             _transport = transport;
-            _logger.Msg($"Live voice session ready. Capture={_captureSource}|Codec=Pcm16|SampleRate={_settings.SampleRate}|FrameSize={_settings.FrameSize}|Scene={SceneManager.GetActiveScene().name}");
+            _logger.Msg($"Live voice session ready. Capture={_captureSource}|Codec={localCodecKind}|SampleRate={_settings.SampleRate}|FrameSize={_settings.FrameSize}|Scene={SceneManager.GetActiveScene().name}");
             return true;
         }
         catch (Exception ex)
@@ -266,6 +288,85 @@ internal sealed class LiveVoiceRuntime : IDisposable
             _logger.Error($"Live voice mode disabled: {ex.Message}");
             return false;
         }
+    }
+
+    private VoiceCodecKind ResolveLocalCodecKind()
+    {
+        if (_codecKind != VoiceCodecKind.Opus)
+            return _codecKind;
+
+        try
+        {
+            using var probe = CreateCodec(VoiceCodecKind.Opus);
+            return VoiceCodecKind.Opus;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning($"Native Opus codec unavailable; falling back to PCM16. Error={ex.Message}");
+            return VoiceCodecKind.Pcm16;
+        }
+    }
+
+    private IVoiceCodec CreateCodec(VoiceCodecKind kind)
+    {
+        return VoiceCodecFactory.Create(kind, ToCodecOptions());
+    }
+
+    private IVoiceCodec? CreateCodecForRemote(VoiceCodecKind kind)
+    {
+        try
+        {
+            return CreateCodec(kind);
+        }
+        catch (Exception ex)
+        {
+            if (_settings.DiagnosticLoggingEnabled)
+                _logger.Warning($"Could not create remote voice codec. Codec={kind}|Error={ex.Message}");
+
+            return null;
+        }
+    }
+
+    private VoiceCodecOptions ToCodecOptions()
+    {
+        return new VoiceCodecOptions
+        {
+            SampleRate = _settings.SampleRate,
+            Channels = _settings.Channels,
+            FrameSize = _settings.FrameSize,
+            OpusBitrate = _settings.OpusBitrate,
+            OpusComplexity = _settings.OpusComplexity,
+            OpusExpectedPacketLossPercent = _settings.OpusExpectedPacketLossPercent,
+            OpusInbandFecEnabled = _settings.OpusInbandFecEnabled,
+            OpusDtxEnabled = _settings.OpusDtxEnabled
+        };
+    }
+
+    private static int GetNearestOpusFrameSize(int sampleRate, int requestedFrameSize)
+    {
+        var candidates = new[]
+        {
+            sampleRate / 400,
+            sampleRate / 200,
+            sampleRate / 100,
+            sampleRate / 50,
+            sampleRate / 25,
+            sampleRate * 3 / 50
+        };
+
+        var best = candidates[0];
+        var bestDistance = Math.Abs(requestedFrameSize - best);
+        for (var i = 1; i < candidates.Length; i++)
+        {
+            var distance = Math.Abs(requestedFrameSize - candidates[i]);
+            if (distance >= bestDistance)
+                continue;
+
+            best = candidates[i];
+            bestDistance = distance;
+        }
+
+        return best;
     }
 
     private void UpdateRecording(bool shouldCapture)

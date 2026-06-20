@@ -26,11 +26,14 @@ param(
     [switch]$OpenMic,
     [switch]$HostOpenMic,
     [switch]$ClientOpenMic,
+    [ValidateSet("Opus", "Pcm16")]
+    [string]$Codec = "Opus",
+    [int]$OpusBitrate = 24000,
     [ValidateSet("Global", "Proximity", "Whisper", "Shout", "Radio")]
     [string]$VoiceChannel = "Global",
     [ValidateSet("Microphone", "Wasapi", "Tone")]
-    [string]$CaptureSource = "Microphone",
-    [string]$MicDevice = "",
+    [string]$CaptureSource = "Wasapi",
+    [string]$MicDevice = "auto",
     [string]$Token = "",
     [switch]$SkipBuild
 )
@@ -61,7 +64,7 @@ function Copy-VoiceChatUserLibDependencies {
         [string]$TargetUserLibsPath
     )
 
-    foreach ($dependency in @("NAudio.Core.dll", "NAudio.Wasapi.dll")) {
+    foreach ($dependency in @("NAudio.Core.dll", "NAudio.Wasapi.dll", "opus.dll")) {
         $source = Join-Path $BuildOutputDir $dependency
         Assert-Path $source "S1VoiceChat voice dependency"
         Copy-Item -LiteralPath $source -Destination (Join-Path $TargetUserLibsPath $dependency) -Force
@@ -77,6 +80,7 @@ function New-LiveVoiceArgs([bool]$IncludeOpenMic) {
         "--s1vc-live-voice",
         "--s1vc-ptt-key", (Quote-Argument $PushToTalkKey),
         "--s1vc-voice-channel", (Quote-Argument $VoiceChannel),
+        "--s1vc-codec", (Quote-Argument $Codec),
         "--s1vc-capture-source", $CaptureSource.ToLowerInvariant()
     )
 
@@ -87,6 +91,11 @@ function New-LiveVoiceArgs([bool]$IncludeOpenMic) {
 
     if ($OpenMic -or $IncludeOpenMic) {
         $liveVoiceParts += "--s1vc-open-mic"
+    }
+
+    if ($Codec -eq "Opus" -and $OpusBitrate -gt 0) {
+        $liveVoiceParts += "--s1vc-opus-bitrate"
+        $liveVoiceParts += $OpusBitrate.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     }
 
     return $liveVoiceParts -join " "
@@ -221,7 +230,7 @@ Write-Host "Host launcher: $hostLauncher" -ForegroundColor Green
 Write-Host "Client launcher: $clientLauncher" -ForegroundColor Green
 Write-Host "Press $ManualKey in either client after both are in the LocalLobby session." -ForegroundColor Green
 if ($EnableLiveVoice) {
-    Write-Host "Live voice enabled. Hold $PushToTalkKey to transmit $CaptureSource audio on $VoiceChannel channel." -ForegroundColor Green
+    Write-Host "Live voice enabled. Hold $PushToTalkKey to transmit $CaptureSource audio on $VoiceChannel channel using $Codec codec." -ForegroundColor Green
     if ($OpenMic -or $HostOpenMic -or $ClientOpenMic) {
         Write-Host "Open mic launch argument is enabled for: $(if ($OpenMic) { 'both' } elseif ($HostOpenMic -and $ClientOpenMic) { 'host, client' } elseif ($HostOpenMic) { 'host' } else { 'client' })." -ForegroundColor Green
     }

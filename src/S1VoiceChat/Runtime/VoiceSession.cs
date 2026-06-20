@@ -10,8 +10,9 @@ public sealed class VoiceSession : IDisposable
 {
     private readonly IVoiceTransport _transport;
     private readonly IVoiceCodec _localCodec;
+    private readonly VoiceCodecKind _localCodecKind;
     private readonly VoiceSettings _settings;
-    private readonly Func<IVoiceCodec> _remoteCodecFactory;
+    private readonly Func<VoiceCodecKind, IVoiceCodec?> _remoteCodecFactory;
     private readonly Dictionary<ulong, RemoteVoiceStream> _remoteStreams = new();
     private ushort _sequence;
     private bool _disposed;
@@ -21,13 +22,15 @@ public sealed class VoiceSession : IDisposable
         IVoiceTransport transport,
         IVoiceCodec localCodec,
         VoiceSettings settings,
-        Func<IVoiceCodec>? remoteCodecFactory = null)
+        VoiceCodecKind localCodecKind = VoiceCodecKind.Opus,
+        Func<VoiceCodecKind, IVoiceCodec?>? remoteCodecFactory = null)
     {
         LocalPeerId = localPeerId;
         _transport = transport;
         _localCodec = localCodec;
+        _localCodecKind = localCodecKind;
         _settings = settings;
-        _remoteCodecFactory = remoteCodecFactory ?? (() => new NativeOpusCodec(_settings.SampleRate, _settings.Channels, _settings.FrameSize));
+        _remoteCodecFactory = remoteCodecFactory ?? CreateDefaultRemoteCodec;
         _transport.OnPacket += OnPacket;
     }
 
@@ -52,6 +55,7 @@ public sealed class VoiceSession : IDisposable
         {
             Version = 1,
             Channel = (byte)channel,
+            Codec = _localCodecKind,
             Sequence = _sequence++,
             CaptureTimeMs = unchecked((uint)Environment.TickCount),
             SenderPeerId = LocalPeerId,
@@ -73,8 +77,7 @@ public sealed class VoiceSession : IDisposable
         if (_remoteStreams.TryGetValue(peerId, out var stream))
             return stream;
 
-        var codec = _remoteCodecFactory();
-        stream = new RemoteVoiceStream(peerId, codec, _settings);
+        stream = new RemoteVoiceStream(peerId, _remoteCodecFactory, _settings);
         _remoteStreams.Add(peerId, stream);
         return stream;
     }
@@ -110,5 +113,27 @@ public sealed class VoiceSession : IDisposable
 
         _remoteStreams.Clear();
         _disposed = true;
+    }
+
+    private IVoiceCodec? CreateDefaultRemoteCodec(VoiceCodecKind kind)
+    {
+        return kind is VoiceCodecKind.Opus or VoiceCodecKind.Pcm16
+            ? VoiceCodecFactory.Create(kind, ToCodecOptions())
+            : null;
+    }
+
+    private VoiceCodecOptions ToCodecOptions()
+    {
+        return new VoiceCodecOptions
+        {
+            SampleRate = _settings.SampleRate,
+            Channels = _settings.Channels,
+            FrameSize = _settings.FrameSize,
+            OpusBitrate = _settings.OpusBitrate,
+            OpusComplexity = _settings.OpusComplexity,
+            OpusExpectedPacketLossPercent = _settings.OpusExpectedPacketLossPercent,
+            OpusInbandFecEnabled = _settings.OpusInbandFecEnabled,
+            OpusDtxEnabled = _settings.OpusDtxEnabled
+        };
     }
 }

@@ -8,16 +8,18 @@ namespace S1VoiceChat.Runtime;
 
 public sealed class RemoteVoiceStream : IDisposable
 {
-    private readonly IVoiceCodec _codec;
+    private readonly Func<VoiceCodecKind, IVoiceCodec?> _codecFactory;
+    private readonly Dictionary<VoiceCodecKind, IVoiceCodec> _codecs = new();
     private readonly JitterBuffer _jitterBuffer;
     private readonly AudioRingBuffer _audioBuffer;
     private readonly short[] _decodeBuffer;
+    private VoiceCodecKind _lastCodecKind = VoiceCodecKind.Opus;
     private bool _disposed;
 
-    public RemoteVoiceStream(ulong peerId, IVoiceCodec codec, VoiceSettings settings)
+    public RemoteVoiceStream(ulong peerId, Func<VoiceCodecKind, IVoiceCodec?> codecFactory, VoiceSettings settings)
     {
         PeerId = peerId;
-        _codec = codec;
+        _codecFactory = codecFactory;
         _jitterBuffer = new JitterBuffer
         {
             TargetBufferedPackets = settings.JitterTargetPackets,
@@ -52,11 +54,14 @@ public sealed class RemoteVoiceStream : IDisposable
             Array.Clear(_decodeBuffer, 0, _decodeBuffer.Length);
 
             var decodedSamples = missing || packet == null
-                ? _codec.DecodePacketLoss(_decodeBuffer)
-                : _codec.Decode(packet.Payload, _decodeBuffer);
+                ? DecodePacketLoss()
+                : DecodePacket(packet);
 
             if (decodedSamples > 0)
-                _audioBuffer.Write(_decodeBuffer.AsSpan(0, decodedSamples * _codec.Channels));
+            {
+                var channels = GetCodec(_lastCodecKind)?.Channels ?? 1;
+                _audioBuffer.Write(_decodeBuffer.AsSpan(0, decodedSamples * channels));
+            }
         }
     }
 
@@ -72,6 +77,44 @@ public sealed class RemoteVoiceStream : IDisposable
 
         _disposed = true;
         _audioBuffer.Clear();
-        _codec.Dispose();
+        foreach (var codec in _codecs.Values)
+            codec.Dispose();
+
+        _codecs.Clear();
+    }
+
+    private int DecodePacket(VoicePacket packet)
+    {
+        if (packet.Codec == VoiceCodecKind.Control)
+            return 0;
+
+        var codec = GetCodec(packet.Codec);
+        if (codec == null)
+            return 0;
+
+        _lastCodecKind = packet.Codec;
+        return codec.Decode(packet.Payload, _decodeBuffer);
+    }
+
+    private int DecodePacketLoss()
+    {
+        var codec = GetCodec(_lastCodecKind);
+        return codec?.DecodePacketLoss(_decodeBuffer) ?? 0;
+    }
+
+    private IVoiceCodec? GetCodec(VoiceCodecKind kind)
+    {
+        if (kind == VoiceCodecKind.Control)
+            return null;
+
+        if (_codecs.TryGetValue(kind, out var codec))
+            return codec;
+
+        codec = _codecFactory(kind);
+        if (codec == null)
+            return null;
+
+        _codecs.Add(kind, codec);
+        return codec;
     }
 }

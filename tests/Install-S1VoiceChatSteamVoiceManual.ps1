@@ -19,6 +19,9 @@ param(
     [string]$PushToTalkKey = "V",
     [ValidateSet("Global", "Proximity", "Whisper", "Shout", "Radio")]
     [string]$VoiceChannel = "Global",
+    [ValidateSet("Opus", "Pcm16")]
+    [string]$Codec = "Opus",
+    [int]$OpusBitrate = 24000,
     [ValidateSet("Microphone", "Wasapi", "Tone")]
     [string]$CaptureSource = "Wasapi",
     [string]$MicDevice = "auto",
@@ -54,7 +57,7 @@ function Copy-VoiceChatUserLibDependencies {
         [string]$TargetUserLibsPath
     )
 
-    foreach ($dependency in @("NAudio.Core.dll", "NAudio.Wasapi.dll")) {
+    foreach ($dependency in @("NAudio.Core.dll", "NAudio.Wasapi.dll", "opus.dll")) {
         $source = Join-Path $BuildOutputDir $dependency
         Assert-Path $source "S1VoiceChat voice dependency"
         Copy-Item -LiteralPath $source -Destination (Join-Path $TargetUserLibsPath $dependency) -Force
@@ -126,7 +129,7 @@ Copy-Item -LiteralPath $realSteamApi -Destination $activeSteamApi -Force
 $liveVoiceArgs = if ($ProbeOnly) {
     "--s1vc-steam-voice-probe --s1vc-ptt-key $PushToTalkKey"
 } else {
-    "--s1vc-live-voice --s1vc-ptt-key $(Quote-Argument $PushToTalkKey) --s1vc-voice-channel $(Quote-Argument $VoiceChannel) --s1vc-capture-source $($CaptureSource.ToLowerInvariant())"
+    "--s1vc-live-voice --s1vc-ptt-key $(Quote-Argument $PushToTalkKey) --s1vc-voice-channel $(Quote-Argument $VoiceChannel) --s1vc-codec $(Quote-Argument $Codec) --s1vc-capture-source $($CaptureSource.ToLowerInvariant())"
 }
 
 if ($OpenMic -and -not $ProbeOnly) {
@@ -135,6 +138,10 @@ if ($OpenMic -and -not $ProbeOnly) {
 
 if (-not $ProbeOnly -and -not [string]::IsNullOrWhiteSpace($MicDevice)) {
     $liveVoiceArgs += " --s1vc-mic-device $(Quote-Argument $MicDevice)"
+}
+
+if (-not $ProbeOnly -and $Codec -eq "Opus" -and $OpusBitrate -gt 0) {
+    $liveVoiceArgs += " --s1vc-opus-bitrate $OpusBitrate"
 }
 
 Set-Content -LiteralPath $launchOptionsPath -Value $liveVoiceArgs -Encoding UTF8
