@@ -28,6 +28,7 @@ Implemented foundation:
 - Voice session coordinator.
 - Basic settings model.
 - IL2CPP-oriented notes.
+- CI workflow for core compile checks.
 
 Not implemented yet:
 
@@ -37,6 +38,20 @@ Not implemented yet:
 - Unity `AudioSource` / streaming `AudioClip` playback.
 - Dedicated server relay integration.
 - In-game UI, mute menu, push-to-talk binding, and speaking indicators.
+
+## Build configurations
+
+The project now follows the same configuration naming pattern as the S1API template:
+
+```powershell
+dotnet build src/S1VoiceChat/S1VoiceChat.csproj -c CrossCompat
+dotnet build src/S1VoiceChat/S1VoiceChat.csproj -c MonoMelon
+dotnet build src/S1VoiceChat/S1VoiceChat.csproj -c Il2CppMelon
+```
+
+`CrossCompat` and `MonoMelon` target `netstandard2.1`. `Il2CppMelon` targets `net6.0`, matching the common MelonLoader IL2CPP pattern.
+
+Copy `src/S1VoiceChat/local.build.props.template` to `src/S1VoiceChat/local.build.props` when you start adding local Schedule I, MelonLoader, SteamNetworkLib, or assembly references.
 
 ## Suggested validation path
 
@@ -64,6 +79,7 @@ On Windows, the P/Invoke target is currently `opus`. This usually resolves to `o
 
 ```text
 src/S1VoiceChat/
+├─ Capture/
 ├─ Codec/
 ├─ Network/
 ├─ Playback/
