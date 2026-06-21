@@ -120,12 +120,18 @@ Do not package Schedule I assemblies, generated Il2Cpp assemblies, AssetRipper e
 
 ## CI notes
 
-The real Mono and Il2Cpp builds depend on local game and MelonLoader references, so GitHub-hosted runners cannot perform the full release build without extra private setup.
+GitHub Actions builds both runtime targets using private reference-assembly repositories:
 
-The old `CrossCompat` CI step is stale and should not be used for this project. CI should either:
+- `ifBars/schedule-one-assemblies` for Mono game and MelonLoader references.
+- `ifBars/il2cpp-scheduleone-assemblies` for generated Il2Cpp and MelonLoader `net6` references.
+- `ifBars/SteamNetworkLib`, built during the workflow so the packaged `UserLibs/SteamNetworkLib.dll` matches the target runtime.
 
-- run the pure unit harness only, or
-- run on a controlled self-hosted Windows runner with the required local references installed.
+The repository needs secrets that can read the private assembly repositories:
+
+- `SCHEDULE_ONE_ASSEMBLIES_TOKEN` or `GAME_ASSEMBLIES_TOKEN`
+- `IL2CPP_SCHEDULE_ONE_ASSEMBLIES_TOKEN` or `IL2CPP_ASSEMBLIES_TOKEN`
+
+There is no CrossCompat CI build. The live mod references Mono and Il2Cpp game assemblies behind conditional compilation, so release CI builds `MonoMelon` and `Il2CppMelon` separately.
 
 ## Architecture notes
 

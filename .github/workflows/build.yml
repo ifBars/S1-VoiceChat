@@ -1,18 +1,182 @@
-name: Build
+name: Build and Release
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  unit-tests:
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - name: Checkout S1 VoiceChat
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - run: dotnet restore src/S1VoiceChat/S1VoiceChat.csproj
-      - run: dotnet build src/S1VoiceChat/S1VoiceChat.csproj -c CrossCompat --no-restore
-      - run: dotnet build src/S1VoiceChat/S1VoiceChat.csproj -c MonoMelon --no-restore
-      - run: dotnet build src/S1VoiceChat/S1VoiceChat.csproj -c Il2CppMelon --no-restore
+
+      - name: Run unit harness
+        run: dotnet run --project tests/S1VoiceChat.Tests/S1VoiceChat.Tests.csproj -c Release
+
+  build-mod:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    needs: unit-tests
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout S1 VoiceChat
+        uses: actions/checkout@v4
+
+      - name: Checkout SteamNetworkLib
+        uses: actions/checkout@v4
+        with:
+          repository: ifBars/SteamNetworkLib
+          path: ci/SteamNetworkLib
+          fetch-depth: 1
+
+      - name: Checkout Mono game assemblies
+        uses: actions/checkout@v4
+        with:
+          repository: ifBars/schedule-one-assemblies
+          token: ${{ secrets.SCHEDULE_ONE_ASSEMBLIES_TOKEN || secrets.GAME_ASSEMBLIES_TOKEN }}
+          path: ci/schedule-one-assemblies
+          fetch-depth: 1
+
+      - name: Checkout IL2CPP game assemblies
+        uses: actions/checkout@v4
+        with:
+          repository: ifBars/il2cpp-scheduleone-assemblies
+          token: ${{ secrets.IL2CPP_SCHEDULE_ONE_ASSEMBLIES_TOKEN || secrets.IL2CPP_ASSEMBLIES_TOKEN }}
+          path: ci/il2cpp-scheduleone-assemblies
+          fetch-depth: 1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            6.0.x
+
+      - name: Resolve assembly inputs
+        id: refs
+        shell: pwsh
+        run: |
+          $monoManaged = Resolve-Path "ci/schedule-one-assemblies/Managed"
+
+          $monoMelon = $null
+          foreach ($candidate in @("ci/schedule-one-assemblies/MelonLoaderMono", "ci/schedule-one-assemblies/MelonLoader/net35", "ci/schedule-one-assemblies/MelonLoader")) {
+            if (Test-Path (Join-Path $candidate "MelonLoader.dll")) {
+              $monoMelon = (Resolve-Path $candidate).Path
+              break
+            }
+          }
+
+          $il2cppAssemblies = $null
+          foreach ($candidate in @("ci/il2cpp-scheduleone-assemblies/MelonLoader/Il2CppAssemblies", "ci/il2cpp-scheduleone-assemblies/Il2CppAssemblies")) {
+            if (Test-Path (Join-Path $candidate "Assembly-CSharp.dll")) {
+              $il2cppAssemblies = (Resolve-Path $candidate).Path
+              break
+            }
+          }
+
+          $il2cppMelon = $null
+          foreach ($candidate in @("ci/il2cpp-scheduleone-assemblies/MelonLoader/net6", "ci/il2cpp-scheduleone-assemblies/net6")) {
+            if (Test-Path (Join-Path $candidate "MelonLoader.dll")) {
+              $il2cppMelon = (Resolve-Path $candidate).Path
+              break
+            }
+          }
+
+          if (!$monoMelon) { throw "Unable to locate Mono MelonLoader assemblies." }
+          if (!$il2cppAssemblies) { throw "Unable to locate IL2CPP generated assemblies." }
+          if (!$il2cppMelon) { throw "Unable to locate IL2CPP MelonLoader net6 assemblies." }
+
+          "monoManaged=$monoManaged" >> $env:GITHUB_OUTPUT
+          "monoMelon=$monoMelon" >> $env:GITHUB_OUTPUT
+          "il2cppAssemblies=$il2cppAssemblies" >> $env:GITHUB_OUTPUT
+          "il2cppMelon=$il2cppMelon" >> $env:GITHUB_OUTPUT
+
+      - name: Build SteamNetworkLib
+        shell: pwsh
+        run: |
+          $props = @"
+          <Project>
+            <PropertyGroup>
+              <SteamworksManagedPath>${{ steps.refs.outputs.monoManaged }}</SteamworksManagedPath>
+              <MelonLoaderNet35Path>${{ steps.refs.outputs.monoMelon }}</MelonLoaderNet35Path>
+              <MelonLoaderIl2CppPath>${{ steps.refs.outputs.il2cppAssemblies }}</MelonLoaderIl2CppPath>
+              <MelonLoaderNet6Path>${{ steps.refs.outputs.il2cppMelon }}</MelonLoaderNet6Path>
+            </PropertyGroup>
+          </Project>
+          "@
+
+          Set-Content -Path "ci/SteamNetworkLib/Directory.Build.user.props" -Value $props -Encoding UTF8
+
+          dotnet restore ci/SteamNetworkLib/SteamNetworkLib.csproj -p:Configuration=Mono
+          dotnet build ci/SteamNetworkLib/SteamNetworkLib.csproj --no-restore -c Mono -v minimal
+
+          Remove-Item -LiteralPath "ci/SteamNetworkLib/obj" -Recurse -Force -ErrorAction SilentlyContinue
+
+          dotnet restore ci/SteamNetworkLib/SteamNetworkLib.csproj -p:Configuration=Il2cpp
+          dotnet build ci/SteamNetworkLib/SteamNetworkLib.csproj --no-restore -c Il2cpp -v minimal
+
+      - name: Create S1 VoiceChat CI properties
+        shell: pwsh
+        run: |
+          $root = (Get-Location).Path
+          $props = @"
+          <Project>
+            <PropertyGroup>
+              <MonoAssembliesPath>${{ steps.refs.outputs.monoManaged }}</MonoAssembliesPath>
+              <SteamworksManagedPath>${{ steps.refs.outputs.monoManaged }}</SteamworksManagedPath>
+              <MelonLoaderMonoAssembliesPath>${{ steps.refs.outputs.monoMelon }}</MelonLoaderMonoAssembliesPath>
+              <Il2CppAssembliesPath>${{ steps.refs.outputs.il2cppAssemblies }}</Il2CppAssembliesPath>
+              <MelonLoaderAssembliesPath>${{ steps.refs.outputs.il2cppMelon }}</MelonLoaderAssembliesPath>
+              <SteamNetworkLibMonoAssemblyPath>$root\ci\SteamNetworkLib\bin\Mono\netstandard2.1\SteamNetworkLib.dll</SteamNetworkLibMonoAssemblyPath>
+              <SteamNetworkLibIl2CppAssemblyPath>$root\ci\SteamNetworkLib\bin\Il2cpp\netstandard2.1\SteamNetworkLib.dll</SteamNetworkLibIl2CppAssemblyPath>
+            </PropertyGroup>
+          </Project>
+          "@
+
+          Set-Content -Path "ci.build.props" -Value $props -Encoding UTF8
+
+      - name: Build S1 VoiceChat
+        run: |
+          dotnet restore src/S1VoiceChat/S1VoiceChat.csproj -p:Configuration=MonoMelon
+          dotnet build src/S1VoiceChat/S1VoiceChat.csproj --no-restore -c MonoMelon -v minimal
+
+          Remove-Item -LiteralPath "src/S1VoiceChat/obj" -Recurse -Force -ErrorAction SilentlyContinue
+
+          dotnet restore src/S1VoiceChat/S1VoiceChat.csproj -p:Configuration=Il2CppMelon
+          dotnet build src/S1VoiceChat/S1VoiceChat.csproj --no-restore -c Il2CppMelon -v minimal
+
+      - name: Package release assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "..\SteamNetworkLib\bin\Mono\netstandard2.1" -Force | Out-Null
+          New-Item -ItemType Directory -Path "..\SteamNetworkLib\bin\Il2cpp\netstandard2.1" -Force | Out-Null
+          Copy-Item "ci/SteamNetworkLib/bin/Mono/netstandard2.1/SteamNetworkLib.dll" "..\SteamNetworkLib\bin\Mono\netstandard2.1\SteamNetworkLib.dll" -Force
+          Copy-Item "ci/SteamNetworkLib/bin/Il2cpp/netstandard2.1/SteamNetworkLib.dll" "..\SteamNetworkLib\bin\Il2cpp\netstandard2.1\SteamNetworkLib.dll" -Force
+          ./scripts/Package-Release.ps1
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: S1VoiceChat-release-packages
+          path: artifacts/release/*.zip
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: S1 VoiceChat ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: artifacts/release/*.zip

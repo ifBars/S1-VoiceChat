@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <Import Project="..\..\..\SteamNetworkLib\Directory.Build.user.props" Condition="Exists('..\..\..\SteamNetworkLib\Directory.Build.user.props')" />
+  <Import Project="..\..\ci.build.props" Condition="Exists('..\..\ci.build.props')" />
   <Import Project="local.build.props" Condition="Exists('local.build.props')" />
 
   <PropertyGroup>
@@ -12,12 +13,18 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <RootNamespace>S1VoiceChat</RootNamespace>
+    <Version>1.0.1</Version>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
+    <InformationalVersion>1.0.1</InformationalVersion>
     <Configurations>MonoMelon;Il2CppMelon</Configurations>
     <Platforms>AnyCPU</Platforms>
     <SteamworksManagedPath Condition="'$(SteamworksManagedPath)' == '' AND '$(MonoAssembliesPath)' != ''">$(MonoAssembliesPath)</SteamworksManagedPath>
     <MelonLoaderIl2CppPath Condition="'$(MelonLoaderIl2CppPath)' == '' AND '$(Il2CppAssembliesPath)' != ''">$(Il2CppAssembliesPath)</MelonLoaderIl2CppPath>
     <MelonLoaderMonoAssembliesPath Condition="'$(MelonLoaderMonoAssembliesPath)' == '' AND '$(MelonLoaderNet35Path)' != ''">$(MelonLoaderNet35Path)</MelonLoaderMonoAssembliesPath>
     <MelonLoaderAssembliesPath Condition="'$(MelonLoaderAssembliesPath)' == '' AND '$(MelonLoaderNet6Path)' != ''">$(MelonLoaderNet6Path)</MelonLoaderAssembliesPath>
+    <SteamNetworkLibMonoAssemblyPath Condition="'$(SteamNetworkLibMonoAssemblyPath)' == ''">..\..\..\SteamNetworkLib\bin\Mono\netstandard2.1\SteamNetworkLib.dll</SteamNetworkLibMonoAssemblyPath>
+    <SteamNetworkLibIl2CppAssemblyPath Condition="'$(SteamNetworkLibIl2CppAssemblyPath)' == ''">..\..\..\SteamNetworkLib\bin\Il2cpp\netstandard2.1\SteamNetworkLib.dll</SteamNetworkLibIl2CppAssemblyPath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'MonoMelon'">
@@ -51,7 +58,7 @@
       <HintPath>$(SteamworksManagedPath)\com.rlabrecque.steamworks.net.dll</HintPath>
     </Reference>
     <Reference Include="SteamNetworkLib">
-      <HintPath>..\..\..\SteamNetworkLib\bin\Mono\netstandard2.1\SteamNetworkLib.dll</HintPath>
+      <HintPath>$(SteamNetworkLibMonoAssemblyPath)</HintPath>
     </Reference>
     <Reference Include="FishNet.Runtime">
       <HintPath>$(MonoAssembliesPath)\FishNet.Runtime.dll</HintPath>
@@ -108,7 +115,7 @@
       <HintPath>$(MelonLoaderAssembliesPath)\Il2CppInterop.Runtime.dll</HintPath>
     </Reference>
     <Reference Include="SteamNetworkLib">
-      <HintPath>..\..\..\SteamNetworkLib\bin\Il2cpp\netstandard2.1\SteamNetworkLib.dll</HintPath>
+      <HintPath>$(SteamNetworkLibIl2CppAssemblyPath)</HintPath>
     </Reference>
     <Reference Include="Il2CppFishNet.Runtime">
       <HintPath>$(MelonLoaderIl2CppPath)\Il2CppFishNet.Runtime.dll</HintPath>

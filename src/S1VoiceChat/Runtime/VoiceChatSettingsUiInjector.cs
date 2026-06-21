@@ -271,15 +271,25 @@ internal sealed class VoiceChatSettingsUiInjector
 
         var toggle = toggleObject.AddComponent<Toggle>();
 
+        var borderObject = new GameObject("Border");
+        borderObject.transform.SetParent(toggleObject.transform, false);
+        var borderRect = borderObject.AddComponent<RectTransform>();
+        borderRect.anchorMin = Vector2.zero;
+        borderRect.anchorMax = Vector2.one;
+        borderRect.offsetMin = Vector2.zero;
+        borderRect.offsetMax = Vector2.zero;
+        var border = borderObject.AddComponent<Image>();
+        border.color = new Color(0.74f, 0.78f, 0.82f, 0.95f);
+
         var backgroundObject = new GameObject("Background");
-        backgroundObject.transform.SetParent(toggleObject.transform, false);
+        backgroundObject.transform.SetParent(borderObject.transform, false);
         var backgroundRect = backgroundObject.AddComponent<RectTransform>();
         backgroundRect.anchorMin = Vector2.zero;
         backgroundRect.anchorMax = Vector2.one;
-        backgroundRect.offsetMin = Vector2.zero;
-        backgroundRect.offsetMax = Vector2.zero;
+        backgroundRect.offsetMin = new Vector2(3f, 3f);
+        backgroundRect.offsetMax = new Vector2(-3f, -3f);
         var background = backgroundObject.AddComponent<Image>();
-        background.color = new Color(0.16f, 0.16f, 0.16f, 0.92f);
+        background.color = new Color(0.08f, 0.09f, 0.10f, 0.96f);
 
         var checkmarkObject = new GameObject("Checkmark");
         checkmarkObject.transform.SetParent(backgroundObject.transform, false);
@@ -289,9 +299,9 @@ internal sealed class VoiceChatSettingsUiInjector
         checkmarkRect.offsetMin = Vector2.zero;
         checkmarkRect.offsetMax = Vector2.zero;
         var checkmark = checkmarkObject.AddComponent<Image>();
-        checkmark.color = new Color(0.22f, 0.78f, 0.18f, 1f);
+        checkmark.color = new Color(0.30f, 0.95f, 0.22f, 1f);
 
-        toggle.targetGraphic = background;
+        toggle.targetGraphic = border;
         toggle.graphic = checkmark;
         toggle.interactable = true;
         return toggle;

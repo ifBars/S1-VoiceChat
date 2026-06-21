@@ -7,7 +7,7 @@ using S1VoiceChat.Testing;
 using SteamNetworkLib;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(S1VoiceChat.Core), "S1 VoiceChat", "1.0.0", "Bars")]
+[assembly: MelonInfo(typeof(S1VoiceChat.Core), "S1 VoiceChat", "1.0.1", "Bars")]
 [assembly: MelonColor(255, 74, 144, 226)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
